@@ -1,7 +1,12 @@
 name: Tarik Data API ke Neon
 
 on:
-  workflow_dispatch: # Ini memunculkan tombol 'Run' agar bisa dijalankan manual
+  workflow_dispatch: # Tombol jalankan manual tetap ada
+
+# Memberikan izin ke server GitHub agar bisa men-trigger ulang workflow ini sendiri
+permissions:
+  actions: write
+  contents: read
 
 jobs:
   run-script:
@@ -13,10 +18,21 @@ jobs:
       - name: Siapkan Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18' # Versi Node.js yang dipakai
+          node-version: '18'
 
       - name: Install module PostgreSQL
         run: npm install
 
       - name: Jalankan Skrip
         run: node index.js
+
+      - name: Jalankan Ulang Otomatis Jika Belum Selesai
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f lanjutkan.txt ]; then
+            echo "Deteksi data belum selesai ditarik. Memicu workflow baru..."
+            gh workflow run jalankan-skrip.yml
+          else
+            echo "Selesai! Tidak ada data tersisa untuk ditarik."
+          fi
