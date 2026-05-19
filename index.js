@@ -1,7 +1,6 @@
 const { Client } = require('pg');
-const fs = require('fs'); // Modul bawaan Node.js untuk membuat file indikator
+const fs = require('fs');
 
-// GANTI DENGAN CONNECTION STRING NEON ANDA
 const connectionString = 'postgresql://neondb_owner:npg_dD7umJ2anOVc@ep-small-meadow-ao60gqis-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
 
 const client = new Client({ connectionString });
@@ -10,25 +9,20 @@ async function fetchDataAndInsert() {
   await client.connect();
   console.log("Terhubung ke database Neon.");
 
-  // TRICK 1: Cek jumlah data yang sudah ada di database untuk dijadikan posisi awal (offset)
-  console.log("Menghitung data yang sudah ada di database...");
-  const countRes = await client.query('SELECT COUNT(*) FROM satuan_pendidikan;');
-  let offset = parseInt(countRes.rows[0].count) || 0;
-  console.log(`Database saat ini berisi ${offset} baris. Melanjutkan dari offset: ${offset}`);
+  // Membaca offset terakhir dari tabel status_sinkronisasi
+  const stateRes = await client.query('SELECT offset_terakhir FROM status_sinkronisasi WHERE id = 1;');
+  let offset = parseInt(stateRes.rows[0].offset_terakhir);
+  console.log(`Memulai/melanjutkan sinkronisasi dari offset: ${offset}`);
 
   const limit = 20; 
   let hasMoreData = true;
 
-  // Catat waktu mulai skrip dijalankan
   const startTime = Date.now();
-  const LAMA_MAKSIMAL = 5 * 60 * 60 * 1000; // 5 jam dalam milidetik
+  const LAMA_MAKSIMAL = 5 * 60 * 60 * 1000; // 5 jam
 
   while (hasMoreData) {
-    // TRICK 2: Cek apakah skrip sudah berjalan mendekati 5 jam
     if (Date.now() - startTime > LAMA_MAKSIMAL) {
-      console.log("⚠️ Sudah berjalan 5 jam! Berhenti dengan aman untuk menghindari timeout GitHub.");
-      
-      // Buat file penanda 'lanjutkan.txt' agar GitHub Actions tahu harus jalan lagi
+      console.log("⚠️ Mendekati 5 jam! Berhenti untuk menghindari timeout GitHub.");
       fs.writeFileSync('lanjutkan.txt', 'true');
       break;
     }
@@ -36,18 +30,23 @@ async function fetchDataAndInsert() {
     const url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/360?limit=${limit}&offset=${offset}`;
 
     try {
-      console.log(`Mengambil data dari API dengan offset ${offset}...`);
+      console.log(`Mengecek API offset ${offset}...`);
       const response = await fetch(url);
       const result = await response.json();
       const dataList = result.data;
 
+      // JIKA DATA SUDAH HABIS (SINKRONISASI SELESAI 100%)
       if (!dataList || dataList.length === 0) {
         hasMoreData = false;
-        console.log("🎉 BERHASIL! Semua data dari API telah selesai ditarik.");
+        console.log("🎉 SINKRONISASI SELESAI! Semua data telah dicek.");
+        
+        // Kembalikan status offset ke 0 agar sinkronisasi bulan/minggu depan mulai dari awal
+        await client.query('UPDATE status_sinkronisasi SET offset_terakhir = 0 WHERE id = 1;');
         break;
       }
 
       for (const item of dataList) {
+        // Query UPSERT (Update jika beda, Skip jika sama, Insert jika baru)
         const query = `
           INSERT INTO satuan_pendidikan (
             satuan_pendidikan_id, npsn, nama, bentuk_pendidikan,
@@ -56,7 +55,26 @@ async function fetchDataAndInsert() {
             nama_desa, nama_kecamatan, nama_kabupaten, nama_provinsi, alamat_jalan
           ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
-          ) ON CONFLICT (satuan_pendidikan_id) DO NOTHING;
+          ) ON CONFLICT (satuan_pendidikan_id) DO UPDATE SET
+            npsn = EXCLUDED.npsn,
+            nama = EXCLUDED.nama,
+            bentuk_pendidikan = EXCLUDED.bentuk_pendidikan,
+            bentuk_pendidikan_group = EXCLUDED.bentuk_pendidikan_group,
+            jenis_pendidikan = EXCLUDED.jenis_pendidikan,
+            status_satuan_pendidikan = EXCLUDED.status_satuan_pendidikan,
+            jenjang_pendidikan = EXCLUDED.jenjang_pendidikan,
+            pembina = EXCLUDED.pembina,
+            jalur_pendidikan = EXCLUDED.jalur_pendidikan,
+            kode_wilayah = EXCLUDED.kode_wilayah,
+            nama_desa = EXCLUDED.nama_desa,
+            nama_kecamatan = EXCLUDED.nama_kecamatan,
+            nama_kabupaten = EXCLUDED.nama_kabupaten,
+            nama_provinsi = EXCLUDED.nama_provinsi,
+            alamat_jalan = EXCLUDED.alamat_jalan
+          WHERE 
+            satuan_pendidikan.nama IS DISTINCT FROM EXCLUDED.nama OR
+            satuan_pendidikan.status_satuan_pendidikan IS DISTINCT FROM EXCLUDED.status_satuan_pendidikan OR
+            satuan_pendidikan.alamat_jalan IS DISTINCT FROM EXCLUDED.alamat_jalan;
         `;
 
         const values = [
@@ -69,15 +87,15 @@ async function fetchDataAndInsert() {
         await client.query(query, values);
       }
 
-      console.log(`Berhasil menyimpan data ke database. Total kumulatif data: ${offset + dataList.length}`);
       offset += limit;
+      
+      // Simpan progress offset terbaru ke database setiap kali 1 halaman berhasil diproses
+      await client.query('UPDATE status_sinkronisasi SET offset_terakhir = $1 WHERE id = 1;', [offset]);
 
-      // Jeda 1 detik agar tidak membebani server API belajar.id
       await new Promise(resolve => setTimeout(resolve, 1000));
 
     } catch (error) {
-      console.error("Terjadi kesalahan:", error);
-      // Jika error karena jaringan/RTO, jangan langsung matikan, coba lagi di loop berikutnya
+      console.error("Terjadi kesalahan jaringan/database:", error);
       await new Promise(resolve => setTimeout(resolve, 5000));
     }
   }
