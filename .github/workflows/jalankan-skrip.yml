@@ -1,0 +1,22 @@
+name: Tarik Data API ke Neon
+
+on:
+  workflow_dispatch: # Ini memunculkan tombol 'Run' agar bisa dijalankan manual
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ambil kode dari repository
+        uses: actions/checkout@v3
+
+      - name: Siapkan Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18' # Versi Node.js yang dipakai
+
+      - name: Install module PostgreSQL
+        run: npm install
+
+      - name: Jalankan Skrip
+        run: node index.js
