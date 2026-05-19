@@ -1,42 +1,53 @@
 const { Client } = require('pg');
+const fs = require('fs'); // Modul bawaan Node.js untuk membuat file indikator
 
 // GANTI DENGAN CONNECTION STRING NEON ANDA
-// Formatnya: postgresql://[user]:[password]@[neon_hostname]/[dbname]?sslmode=require
 const connectionString = 'postgresql://neondb_owner:npg_dD7umJ2anOVc@ep-small-meadow-ao60gqis-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
 
-const client = new Client({
-  connectionString: connectionString,
-});
+const client = new Client({ connectionString });
 
 async function fetchDataAndInsert() {
   await client.connect();
   console.log("Terhubung ke database Neon.");
 
-  let offset = 0;
-  const limit = 20; // Batas data per request (sesuai URL Anda)
+  // TRICK 1: Cek jumlah data yang sudah ada di database untuk dijadikan posisi awal (offset)
+  console.log("Menghitung data yang sudah ada di database...");
+  const countRes = await client.query('SELECT COUNT(*) FROM satuan_pendidikan;');
+  let offset = parseInt(countRes.rows[0].count) || 0;
+  console.log(`Database saat ini berisi ${offset} baris. Melanjutkan dari offset: ${offset}`);
+
+  const limit = 20; 
   let hasMoreData = true;
 
+  // Catat waktu mulai skrip dijalankan
+  const startTime = Date.now();
+  const LAMA_MAKSIMAL = 5 * 60 * 60 * 1000; // 5 jam dalam milidetik
+
   while (hasMoreData) {
-    // URL Endpoint API
+    // TRICK 2: Cek apakah skrip sudah berjalan mendekati 5 jam
+    if (Date.now() - startTime > LAMA_MAKSIMAL) {
+      console.log("⚠️ Sudah berjalan 5 jam! Berhenti dengan aman untuk menghindari timeout GitHub.");
+      
+      // Buat file penanda 'lanjutkan.txt' agar GitHub Actions tahu harus jalan lagi
+      fs.writeFileSync('lanjutkan.txt', 'true');
+      break;
+    }
+
     const url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/360?limit=${limit}&offset=${offset}`;
 
     try {
       console.log(`Mengambil data dari API dengan offset ${offset}...`);
       const response = await fetch(url);
       const result = await response.json();
-      
       const dataList = result.data;
 
-      // Jika data sudah tidak ada, hentikan perulangan (looping)
       if (!dataList || dataList.length === 0) {
         hasMoreData = false;
-        console.log("Semua data telah berhasil diambil dan disimpan.");
+        console.log("🎉 BERHASIL! Semua data dari API telah selesai ditarik.");
         break;
       }
 
       for (const item of dataList) {
-        // Query SQL untuk menyimpan data. 
-        // Menggunakan ON CONFLICT untuk mengabaikan jika data dengan ID tersebut sudah ada.
         const query = `
           INSERT INTO satuan_pendidikan (
             satuan_pendidikan_id, npsn, nama, bentuk_pendidikan,
@@ -48,7 +59,6 @@ async function fetchDataAndInsert() {
           ) ON CONFLICT (satuan_pendidikan_id) DO NOTHING;
         `;
 
-        // Mapping data JSON per kolom untuk dimasukkan ke database
         const values = [
           item.satuanPendidikanId, item.npsn, item.nama, item.bentukPendidikan,
           item.bentukPendidikanGroup, item.jenisPendidikan, item.statusSatuanPendidikan,
@@ -59,17 +69,16 @@ async function fetchDataAndInsert() {
         await client.query(query, values);
       }
 
-      console.log(`Berhasil menyimpan ${dataList.length} baris data ke database.`);
-      
-      // Tambahkan offset untuk memuat halaman selanjutnya
+      console.log(`Berhasil menyimpan data ke database. Total kumulatif data: ${offset + dataList.length}`);
       offset += limit;
 
-      // Beri jeda 1 detik antar request agar tidak diblokir oleh server API (Rate Limiting)
+      // Jeda 1 detik agar tidak membebani server API belajar.id
       await new Promise(resolve => setTimeout(resolve, 1000));
 
     } catch (error) {
       console.error("Terjadi kesalahan:", error);
-      hasMoreData = false; // Hentikan proses jika terjadi error kritis
+      // Jika error karena jaringan/RTO, jangan langsung matikan, coba lagi di loop berikutnya
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }
   }
 
@@ -77,5 +86,4 @@ async function fetchDataAndInsert() {
   console.log("Koneksi database ditutup.");
 }
 
-// Jalankan fungsi
 fetchDataAndInsert();
