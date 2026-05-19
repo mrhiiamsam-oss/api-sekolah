@@ -9,7 +9,6 @@ async function fetchDataAndInsert() {
   await client.connect();
   console.log("Terhubung ke database Neon.");
 
-  // Membaca offset terakhir dari tabel status_sinkronisasi
   const stateRes = await client.query('SELECT offset_terakhir FROM status_sinkronisasi WHERE id = 1;');
   let offset = parseInt(stateRes.rows[0].offset_terakhir);
   console.log(`Memulai/melanjutkan sinkronisasi dari offset: ${offset}`);
@@ -40,13 +39,16 @@ async function fetchDataAndInsert() {
         hasMoreData = false;
         console.log("🎉 SINKRONISASI SELESAI! Semua data telah dicek.");
         
-        // Kembalikan status offset ke 0 agar sinkronisasi bulan/minggu depan mulai dari awal
-        await client.query('UPDATE status_sinkronisasi SET offset_terakhir = 0 WHERE id = 1;');
+        // PEMBARUAN: Kembalikan offset ke 0 DAN catat waktu selesai saat ini (NOW())
+        await client.query(`
+          UPDATE status_sinkronisasi 
+          SET offset_terakhir = 0, waktu_selesai_terakhir = NOW() 
+          WHERE id = 1;
+        `);
         break;
       }
 
       for (const item of dataList) {
-        // Query UPSERT (Update jika beda, Skip jika sama, Insert jika baru)
         const query = `
           INSERT INTO satuan_pendidikan (
             satuan_pendidikan_id, npsn, nama, bentuk_pendidikan,
@@ -89,9 +91,7 @@ async function fetchDataAndInsert() {
 
       offset += limit;
       
-      // Simpan progress offset terbaru ke database setiap kali 1 halaman berhasil diproses
       await client.query('UPDATE status_sinkronisasi SET offset_terakhir = $1 WHERE id = 1;', [offset]);
-
       await new Promise(resolve => setTimeout(resolve, 1000));
 
     } catch (error) {
