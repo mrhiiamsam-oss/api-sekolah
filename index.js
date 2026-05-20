@@ -1,6 +1,7 @@
 const { Client } = require('pg');
 const fs = require('fs');
 
+// String koneksi menggunakan database Neon Anda
 const connectionString = 'postgresql://neondb_owner:npg_dD7umJ2anOVc@ep-small-meadow-ao60gqis-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
 
 const client = new Client({ connectionString });
@@ -39,7 +40,7 @@ async function fetchDataAndInsert() {
         hasMoreData = false;
         console.log("🎉 SINKRONISASI SELESAI! Semua data telah dicek.");
         
-        // PEMBARUAN: Kembalikan offset ke 0 DAN catat waktu selesai saat ini (NOW())
+        // Kembalikan offset ke 0 DAN catat waktu selesai saat ini (NOW())
         await client.query(`
           UPDATE status_sinkronisasi 
           SET offset_terakhir = 0, waktu_selesai_terakhir = NOW() 
@@ -49,16 +50,17 @@ async function fetchDataAndInsert() {
       }
 
       for (const item of dataList) {
+        // PERUBAHAN: Sekarang mendeteksi konflik berdasarkan (npsn)
         const query = `
           INSERT INTO satuan_pendidikan (
-            satuan_pendidikan_id, npsn, nama, bentuk_pendidikan,
+            npsn, satuan_pendidikan_id, nama, bentuk_pendidikan,
             bentuk_pendidikan_group, jenis_pendidikan, status_satuan_pendidikan,
             jenjang_pendidikan, pembina, jalur_pendidikan, kode_wilayah,
             nama_desa, nama_kecamatan, nama_kabupaten, nama_provinsi, alamat_jalan
           ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
-          ) ON CONFLICT (satuan_pendidikan_id) DO UPDATE SET
-            npsn = EXCLUDED.npsn,
+          ) ON CONFLICT (npsn) DO UPDATE SET
+            satuan_pendidikan_id = EXCLUDED.satuan_pendidikan_id,
             nama = EXCLUDED.nama,
             bentuk_pendidikan = EXCLUDED.bentuk_pendidikan,
             bentuk_pendidikan_group = EXCLUDED.bentuk_pendidikan_group,
@@ -74,16 +76,31 @@ async function fetchDataAndInsert() {
             nama_provinsi = EXCLUDED.nama_provinsi,
             alamat_jalan = EXCLUDED.alamat_jalan
           WHERE 
+            satuan_pendidikan.satuan_pendidikan_id IS NULL OR
+            satuan_pendidikan.satuan_pendidikan_id IS DISTINCT FROM EXCLUDED.satuan_pendidikan_id OR
             satuan_pendidikan.nama IS DISTINCT FROM EXCLUDED.nama OR
             satuan_pendidikan.status_satuan_pendidikan IS DISTINCT FROM EXCLUDED.status_satuan_pendidikan OR
             satuan_pendidikan.alamat_jalan IS DISTINCT FROM EXCLUDED.alamat_jalan;
         `;
 
+        // PERUBAHAN: Posisi array disesuaikan (npsn di urutan pertama/$1)
         const values = [
-          item.satuanPendidikanId, item.npsn, item.nama, item.bentukPendidikan,
-          item.bentukPendidikanGroup, item.jenisPendidikan, item.statusSatuanPendidikan,
-          item.jenjangPendidikan, item.pembina, item.jalurPendidikan, item.kodeWilayah,
-          item.namaDesa, item.namaKecamatan, item.namaKabupaten, item.namaProvinsi, item.alamatJalan
+          item.npsn,                         // $1
+          item.satuanPendidikanId,           // $2
+          item.nama,                         // $3
+          item.bentukPendidikan,             // $4
+          item.bentukPendidikanGroup,        // $5
+          item.jenisPendidikan,              // $6
+          item.statusSatuanPendidikan,       // $7
+          item.jenjangPendidikan,            // $8
+          item.pembina,                      // $9
+          item.jalurPendidikan,              // $10
+          item.kodeWilayah,                  // $11
+          item.namaDesa,                     // $12
+          item.namaKecamatan,                // $13
+          item.namaKabupaten,                // $14
+          item.namaProvinsi,                 // $15
+          item.alamatJalan                   // $16
         ];
 
         await client.query(query, values);
