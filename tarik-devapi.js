@@ -12,7 +12,6 @@ async function ambilDataAwal() {
   let hasMoreData = true;
 
   while (hasMoreData) {
-    // Sesuaikan URL jika devapi.id menggunakan format parameter page/offset yang berbeda
     const url = `https://sekolah.devapi.id/sekolah?limit=${limit}&offset=${offset}`;
 
     try {
@@ -20,7 +19,6 @@ async function ambilDataAwal() {
       const response = await fetch(url);
       const result = await response.json();
       
-      // Asumsi datanya ada di dalam properti "data" sesuai gambar Anda
       const dataList = result.data;
 
       if (!dataList || dataList.length === 0) {
@@ -30,11 +28,12 @@ async function ambilDataAwal() {
       }
 
       for (const item of dataList) {
+        // PERUBAHAN: Nama kolom kementerian_pembina -> pembina dan jalan -> alamat_jalan
         const query = `
           INSERT INTO satuan_pendidikan (
             npsn, nama, bentuk_pendidikan, jalur_pendidikan, jenjang_pendidikan, 
-            kementerian_pembina, status_satuan_pendidikan, akreditasi, jenis_pendidikan,
-            jalan, rt, rw, nama_dusun, nama_desa, nama_kecamatan, nama_kabupaten, 
+            pembina, status_satuan_pendidikan, akreditasi, jenis_pendidikan,
+            alamat_jalan, rt, rw, nama_dusun, nama_desa, nama_kecamatan, nama_kabupaten, 
             nama_provinsi, kode_wilayah, lintang, bujur, email, website, nomor_telepon,
             sk_pendirian, nama_yayasan, luas_tanah
           ) VALUES (
@@ -43,18 +42,17 @@ async function ambilDataAwal() {
           ) ON CONFLICT (npsn) DO NOTHING;
         `;
 
-        // Memetakan data bercabang (nested JSON) ke dalam satu baris (flatten)
         const values = [
           item.npsn, 
           item.nama, 
           item.bentukPendidikan, 
           item.jalurPendidikan, 
           item.jenjangPendidikan,
-          item.kementerianPembina, 
+          item.kementerianPembina,      // Masuk ke kolom 'pembina'
           item.statusSatuanPendidikan, 
           item.akreditasi, 
           item.jenisPendidikan,
-          item.alamat?.jalan || '', 
+          item.alamat?.jalan || '',     // Masuk ke kolom 'alamat_jalan'
           item.alamat?.rt || '', 
           item.alamat?.rw || '', 
           item.alamat?.nama_dusun || '',
@@ -77,7 +75,7 @@ async function ambilDataAwal() {
       }
 
       offset += limit;
-      // Berhubung limit 100, kita bisa beri jeda sedikit agar server devapi.id tidak kaget
+      
       await new Promise(resolve => setTimeout(resolve, 1000));
 
     } catch (error) {
