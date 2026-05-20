@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       mulai_dari_awal:
-        description: 'Mulai dari offset 0 (tidak lanjutkan offset tersimpan)'
+        description: 'Mulai dari offset 0 (centang hanya jika ingin scan ulang dari awal)'
         type: boolean
-        default: true
+        default: false
   schedule:
     # Menggunakan standar waktu UTC.
     # Jam 16:00 UTC itu sama dengan Jam 23:00 WIB atau Jam 00:00 (Minggu dini hari) WITA.
@@ -43,8 +43,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ -f lanjutkan.txt ]; then
-            echo "Deteksi data belum selesai ditarik. Memicu workflow baru..."
-            gh workflow run jalankan-skrip.yml
+            echo "Deteksi data belum selesai. Memicu workflow baru (lanjut dari offset tersimpan)..."
+            gh workflow run jalankan-skrip.yml -f mulai_dari_awal=false
           else
             echo "Selesai! Tidak ada data tersisa untuk ditarik."
           fi
