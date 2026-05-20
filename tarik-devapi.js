@@ -7,15 +7,17 @@ async function ambilDataAwal() {
   await client.connect();
   console.log("Terhubung ke Neon. Mulai menarik data pondasi dari devapi.id...");
 
-  let offset = 0;
-  const limit = 100; // Limit lebih besar!
+  // PERUBAHAN 1: Ganti offset menjadi page, mulai dari halaman 1
+  let page = 1;
+  const limit = 100; 
   let hasMoreData = true;
 
   while (hasMoreData) {
-    const url = `https://sekolah.devapi.id/sekolah?limit=${limit}&offset=${offset}`;
+    // PERUBAHAN 2: Ubah URL menggunakan parameter 'page'
+    const url = `https://sekolah.devapi.id/sekolah?limit=${limit}&page=${page}`;
 
     try {
-      console.log(`Mengambil data devapi.id offset ${offset}...`);
+      console.log(`Mengambil data devapi.id Halaman ${page}...`);
       const response = await fetch(url);
       const result = await response.json();
       
@@ -27,8 +29,10 @@ async function ambilDataAwal() {
         break;
       }
 
+      // Opsional: Menampilkan 1 nama sekolah agar kita yakin datanya berganti
+      console.log(`-> Ditemukan ${dataList.length} sekolah. Contoh: ${dataList[0].nama}`);
+
       for (const item of dataList) {
-        // PERUBAHAN: Nama kolom kementerian_pembina -> pembina dan jalan -> alamat_jalan
         const query = `
           INSERT INTO satuan_pendidikan (
             npsn, nama, bentuk_pendidikan, jalur_pendidikan, jenjang_pendidikan, 
@@ -48,11 +52,11 @@ async function ambilDataAwal() {
           item.bentukPendidikan, 
           item.jalurPendidikan, 
           item.jenjangPendidikan,
-          item.kementerianPembina,      // Masuk ke kolom 'pembina'
+          item.kementerianPembina,      
           item.statusSatuanPendidikan, 
           item.akreditasi, 
           item.jenisPendidikan,
-          item.alamat?.jalan || '',     // Masuk ke kolom 'alamat_jalan'
+          item.alamat?.jalan || '',     
           item.alamat?.rt || '', 
           item.alamat?.rw || '', 
           item.alamat?.nama_dusun || '',
@@ -74,7 +78,8 @@ async function ambilDataAwal() {
         await client.query(query, values);
       }
 
-      offset += limit;
+      // PERUBAHAN 3: Tambah 1 untuk ke halaman berikutnya (bukan ditambah 100)
+      page++;
       
       await new Promise(resolve => setTimeout(resolve, 1000));
 
