@@ -35,7 +35,8 @@ jobs:
       - name: Jalankan Skrip
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          MULAI_DARI_AWAL: ${{ github.event_name == 'workflow_dispatch' && inputs.mulai_dari_awal && '1' || '' }}
+          # schedule (mingguan): scan penuh dari offset 0 | manual: sesuai centang | auto-retrigger: lanjut offset
+          MULAI_DARI_AWAL: ${{ github.event_name == 'schedule' && '1' || (github.event_name == 'workflow_dispatch' && inputs.mulai_dari_awal && '1') || '' }}
         run: node index.js
 
       - name: Jalankan Ulang Otomatis Jika Belum Selesai
