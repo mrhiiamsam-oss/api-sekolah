@@ -124,6 +124,20 @@ async function syncBatch(dataList) {
   return { baru, diperbarui, tidakBerubah, tanpaNpsn };
 }
 
+const INTERVAL_CATAT_WAKTU_MS = 30 * 60 * 1000; // 30 menit
+
+async function catatWaktuSinkronTerakhir(terakhirDicatatMs, paksa = false) {
+  const sekarang = Date.now();
+  if (!paksa && sekarang - terakhirDicatatMs < INTERVAL_CATAT_WAKTU_MS) {
+    return terakhirDicatatMs;
+  }
+  await client.query(
+    'UPDATE status_sinkronisasi SET waktu_selesai_terakhir = NOW() WHERE id = 1;'
+  );
+  console.log(`Waktu sinkron terakhir dicatat (${new Date().toISOString()}).`);
+  return sekarang;
+}
+
 async function ensureSchema() {
   await client.query(`
     CREATE TABLE IF NOT EXISTS sekolah (
@@ -189,10 +203,12 @@ async function fetchDataAndInsert() {
 
   const startTime = Date.now();
   const LAMA_MAKSIMAL = 5 * 60 * 60 * 1000; // 5 jam
+  let waktuTerakhirDicatat = await catatWaktuSinkronTerakhir(0, true);
 
   while (hasMoreData) {
     if (Date.now() - startTime > LAMA_MAKSIMAL) {
       console.log("⚠️ Mendekati 5 jam! Berhenti untuk menghindari timeout GitHub.");
+      waktuTerakhirDicatat = await catatWaktuSinkronTerakhir(waktuTerakhirDicatat, true);
       fs.writeFileSync('lanjutkan.txt', 'true');
       break;
     }
@@ -229,6 +245,7 @@ async function fetchDataAndInsert() {
       offset += limit;
 
       await client.query('UPDATE status_sinkronisasi SET offset_terakhir = $1 WHERE id = 1;', [offset]);
+      waktuTerakhirDicatat = await catatWaktuSinkronTerakhir(waktuTerakhirDicatat);
 
       const jedaMs = baru === 0 && diperbarui === 0 ? 200 : 1000;
       await new Promise((resolve) => setTimeout(resolve, jedaMs));
