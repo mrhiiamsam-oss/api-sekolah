@@ -1,7 +1,12 @@
 name: Tarik Data API ke Neon
 
 on:
-  workflow_dispatch: # Tombol manual di dashboard GitHub tetap aktif jika ingin dicoba kapan saja
+  workflow_dispatch:
+    inputs:
+      mulai_dari_awal:
+        description: 'Mulai dari offset 0 (tidak lanjutkan offset tersimpan)'
+        type: boolean
+        default: true
   schedule:
     # Menggunakan standar waktu UTC.
     # Jam 16:00 UTC itu sama dengan Jam 23:00 WIB atau Jam 00:00 (Minggu dini hari) WITA.
@@ -30,6 +35,7 @@ jobs:
       - name: Jalankan Skrip
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          MULAI_DARI_AWAL: ${{ github.event_name == 'workflow_dispatch' && inputs.mulai_dari_awal && '1' || '' }}
         run: node index.js
 
       - name: Jalankan Ulang Otomatis Jika Belum Selesai

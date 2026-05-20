@@ -56,6 +56,74 @@ const UPSERT_SEKOLAH = `
   WHERE sekolah.row_fp IS DISTINCT FROM EXCLUDED.row_fp
 `;
 
+function mapItemToValues(item, rowFp) {
+  return [
+    item.npsn,
+    item.nama ?? '',
+    item.bentukPendidikan ?? null,
+    item.bentukPendidikanGroup ?? null,
+    item.jenisPendidikan ?? null,
+    item.statusSatuanPendidikan ?? null,
+    item.jenjangPendidikan ?? null,
+    item.pembina ?? null,
+    item.jalurPendidikan ?? null,
+    item.namaDesa ?? null,
+    item.namaKecamatan ?? null,
+    item.namaKabupaten ?? null,
+    item.namaProvinsi ?? null,
+    item.alamatJalan ?? null,
+    rowFp,
+  ];
+}
+
+async function syncBatch(dataList) {
+  const prepared = [];
+  let tanpaNpsn = 0;
+
+  for (const item of dataList) {
+    if (!item.npsn) {
+      tanpaNpsn++;
+      continue;
+    }
+    prepared.push({
+      item,
+      npsn: item.npsn,
+      rowFp: buildRowFingerprint(item),
+    });
+  }
+
+  if (prepared.length === 0) {
+    return { baru: 0, diperbarui: 0, tidakBerubah: 0, tanpaNpsn };
+  }
+
+  const { rows } = await client.query(
+    'SELECT npsn, row_fp FROM sekolah WHERE npsn = ANY($1::text[])',
+    [prepared.map((p) => p.npsn)]
+  );
+  const existing = new Map(rows.map((r) => [r.npsn, r.row_fp]));
+
+  let baru = 0;
+  let diperbarui = 0;
+  let tidakBerubah = 0;
+
+  for (const { item, npsn, rowFp } of prepared) {
+    const prevFp = existing.get(npsn);
+    if (prevFp === rowFp) {
+      tidakBerubah++;
+      continue;
+    }
+
+    await client.query(UPSERT_SEKOLAH, mapItemToValues(item, rowFp));
+    if (prevFp === undefined) {
+      baru++;
+    } else {
+      diperbarui++;
+    }
+  }
+
+  return { baru, diperbarui, tidakBerubah, tanpaNpsn };
+}
+
 async function ensureSchema() {
   await client.query(`
     CREATE TABLE IF NOT EXISTS sekolah (
@@ -101,9 +169,20 @@ async function fetchDataAndInsert() {
   await ensureSchema();
   console.log("Skema database siap.");
 
-  const stateRes = await client.query('SELECT offset_terakhir FROM status_sinkronisasi WHERE id = 1;');
-  let offset = parseInt(stateRes.rows[0].offset_terakhir);
-  console.log(`Memulai/melanjutkan sinkronisasi dari offset: ${offset}`);
+  const mulaiDariAwal =
+    process.argv.includes('--awal') ||
+    ['1', 'true', 'yes'].includes(String(process.env.MULAI_DARI_AWAL || '').toLowerCase());
+
+  let offset;
+  if (mulaiDariAwal) {
+    await client.query('UPDATE status_sinkronisasi SET offset_terakhir = 0 WHERE id = 1;');
+    offset = 0;
+    console.log('Mulai dari awal (offset direset ke 0).');
+  } else {
+    const stateRes = await client.query('SELECT offset_terakhir FROM status_sinkronisasi WHERE id = 1;');
+    offset = parseInt(stateRes.rows[0].offset_terakhir, 10) || 0;
+    console.log(`Melanjutkan sinkronisasi dari offset: ${offset}`);
+  }
 
   const limit = 20;
   let hasMoreData = true;
@@ -138,47 +217,21 @@ async function fetchDataAndInsert() {
         break;
       }
 
-      let dilewati = 0;
-      let tanpaNpsn = 0;
+      const { baru, diperbarui, tidakBerubah, tanpaNpsn } = await syncBatch(dataList);
 
-      for (const item of dataList) {
-        const npsn = item.npsn;
-        if (!npsn) {
-          tanpaNpsn++;
-          continue;
-        }
-
-        const rowFp = buildRowFingerprint(item);
-        const values = [
-          npsn,
-          item.nama ?? '',
-          item.bentukPendidikan ?? null,
-          item.bentukPendidikanGroup ?? null,
-          item.jenisPendidikan ?? null,
-          item.statusSatuanPendidikan ?? null,
-          item.jenjangPendidikan ?? null,
-          item.pembina ?? null,
-          item.jalurPendidikan ?? null,
-          item.namaDesa ?? null,
-          item.namaKecamatan ?? null,
-          item.namaKabupaten ?? null,
-          item.namaProvinsi ?? null,
-          item.alamatJalan ?? null,
-          rowFp,
-        ];
-
-        const res = await client.query(UPSERT_SEKOLAH, values);
-        if (res.rowCount === 0) {
-          dilewati++;
-        }
-      }
-
-      console.log(`Offset ${offset}: ${dataList.length} baris API, ${dilewati} diskip (fingerprint sama), ${tanpaNpsn} tanpa NPSN.`);
+      console.log(
+        `Offset ${offset}: ${dataList.length} dari API — ` +
+        `${tidakBerubah} tidak berubah, ${baru} baru, ${diperbarui} diperbarui` +
+        (tanpaNpsn ? `, ${tanpaNpsn} tanpa NPSN` : '') +
+        '.'
+      );
 
       offset += limit;
 
       await client.query('UPDATE status_sinkronisasi SET offset_terakhir = $1 WHERE id = 1;', [offset]);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const jedaMs = baru === 0 && diperbarui === 0 ? 200 : 1000;
+      await new Promise((resolve) => setTimeout(resolve, jedaMs));
 
     } catch (error) {
       console.error("Terjadi kesalahan jaringan/database:", error);
