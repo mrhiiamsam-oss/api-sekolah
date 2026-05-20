@@ -1,8 +1,14 @@
+require('dotenv').config();
+
 const { Client } = require('pg');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const connectionString = 'postgresql://neondb_owner:npg_dD7umJ2anOVc@ep-small-meadow-ao60gqis-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  console.error('DATABASE_URL belum diatur. Set variabel lingkungan secara lokal atau tambahkan secret DATABASE_URL di GitHub.');
+  process.exit(1);
+}
 
 const client = new Client({ connectionString });
 
