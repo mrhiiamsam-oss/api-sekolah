@@ -1,9 +1,54 @@
 const { Client } = require('pg');
+const crypto = require('crypto');
 const fs = require('fs');
 
 const connectionString = 'postgresql://neondb_owner:npg_dD7umJ2anOVc@ep-small-meadow-ao60gqis-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
 
 const client = new Client({ connectionString });
+
+function buildRowFingerprint(item) {
+  const payload = {
+    nama: item.nama ?? '',
+    bentuk_pendidikan: item.bentukPendidikan ?? '',
+    bentuk_pendidikan_group: item.bentukPendidikanGroup ?? '',
+    jenis_pendidikan: item.jenisPendidikan ?? '',
+    status_satuan_pendidikan: item.statusSatuanPendidikan ?? '',
+    jenjang_pendidikan: item.jenjangPendidikan ?? '',
+    pembina: item.pembina ?? '',
+    jalur_pendidikan: item.jalurPendidikan ?? '',
+    nama_desa: item.namaDesa ?? '',
+    nama_kecamatan: item.namaKecamatan ?? '',
+    nama_kabupaten: item.namaKabupaten ?? '',
+    nama_provinsi: item.namaProvinsi ?? '',
+    alamat_jalan: item.alamatJalan ?? '',
+  };
+  return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+}
+
+const UPSERT_SEKOLAH = `
+  INSERT INTO sekolah (
+    npsn, nama, bentuk_pendidikan, bentuk_pendidikan_group, jenis_pendidikan,
+    status_satuan_pendidikan, jenjang_pendidikan, pembina, jalur_pendidikan,
+    nama_desa, nama_kecamatan, nama_kabupaten, nama_provinsi, alamat_jalan, row_fp
+  ) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+  ) ON CONFLICT (npsn) DO UPDATE SET
+    nama = EXCLUDED.nama,
+    bentuk_pendidikan = EXCLUDED.bentuk_pendidikan,
+    bentuk_pendidikan_group = EXCLUDED.bentuk_pendidikan_group,
+    jenis_pendidikan = EXCLUDED.jenis_pendidikan,
+    status_satuan_pendidikan = EXCLUDED.status_satuan_pendidikan,
+    jenjang_pendidikan = EXCLUDED.jenjang_pendidikan,
+    pembina = EXCLUDED.pembina,
+    jalur_pendidikan = EXCLUDED.jalur_pendidikan,
+    nama_desa = EXCLUDED.nama_desa,
+    nama_kecamatan = EXCLUDED.nama_kecamatan,
+    nama_kabupaten = EXCLUDED.nama_kabupaten,
+    nama_provinsi = EXCLUDED.nama_provinsi,
+    alamat_jalan = EXCLUDED.alamat_jalan,
+    row_fp = EXCLUDED.row_fp
+  WHERE sekolah.row_fp IS DISTINCT FROM EXCLUDED.row_fp
+`;
 
 async function fetchDataAndInsert() {
   await client.connect();
@@ -13,7 +58,7 @@ async function fetchDataAndInsert() {
   let offset = parseInt(stateRes.rows[0].offset_terakhir);
   console.log(`Memulai/melanjutkan sinkronisasi dari offset: ${offset}`);
 
-  const limit = 20; 
+  const limit = 20;
   let hasMoreData = true;
 
   const startTime = Date.now();
@@ -34,63 +79,57 @@ async function fetchDataAndInsert() {
       const result = await response.json();
       const dataList = result.data;
 
-      // JIKA DATA SUDAH HABIS (SINKRONISASI SELESAI 100%)
       if (!dataList || dataList.length === 0) {
         hasMoreData = false;
         console.log("🎉 SINKRONISASI SELESAI! Semua data telah dicek.");
-        
-        // PEMBARUAN: Kembalikan offset ke 0 DAN catat waktu selesai saat ini (NOW())
+
         await client.query(`
-          UPDATE status_sinkronisasi 
-          SET offset_terakhir = 0, waktu_selesai_terakhir = NOW() 
+          UPDATE status_sinkronisasi
+          SET offset_terakhir = 0, waktu_selesai_terakhir = NOW()
           WHERE id = 1;
         `);
         break;
       }
 
-      for (const item of dataList) {
-        const query = `
-          INSERT INTO satuan_pendidikan (
-            satuan_pendidikan_id, npsn, nama, bentuk_pendidikan,
-            bentuk_pendidikan_group, jenis_pendidikan, status_satuan_pendidikan,
-            jenjang_pendidikan, pembina, jalur_pendidikan, kode_wilayah,
-            nama_desa, nama_kecamatan, nama_kabupaten, nama_provinsi, alamat_jalan
-          ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
-          ) ON CONFLICT (satuan_pendidikan_id) DO UPDATE SET
-            npsn = EXCLUDED.npsn,
-            nama = EXCLUDED.nama,
-            bentuk_pendidikan = EXCLUDED.bentuk_pendidikan,
-            bentuk_pendidikan_group = EXCLUDED.bentuk_pendidikan_group,
-            jenis_pendidikan = EXCLUDED.jenis_pendidikan,
-            status_satuan_pendidikan = EXCLUDED.status_satuan_pendidikan,
-            jenjang_pendidikan = EXCLUDED.jenjang_pendidikan,
-            pembina = EXCLUDED.pembina,
-            jalur_pendidikan = EXCLUDED.jalur_pendidikan,
-            kode_wilayah = EXCLUDED.kode_wilayah,
-            nama_desa = EXCLUDED.nama_desa,
-            nama_kecamatan = EXCLUDED.nama_kecamatan,
-            nama_kabupaten = EXCLUDED.nama_kabupaten,
-            nama_provinsi = EXCLUDED.nama_provinsi,
-            alamat_jalan = EXCLUDED.alamat_jalan
-          WHERE 
-            satuan_pendidikan.nama IS DISTINCT FROM EXCLUDED.nama OR
-            satuan_pendidikan.status_satuan_pendidikan IS DISTINCT FROM EXCLUDED.status_satuan_pendidikan OR
-            satuan_pendidikan.alamat_jalan IS DISTINCT FROM EXCLUDED.alamat_jalan;
-        `;
+      let dilewati = 0;
+      let tanpaNpsn = 0;
 
+      for (const item of dataList) {
+        const npsn = item.npsn;
+        if (!npsn) {
+          tanpaNpsn++;
+          continue;
+        }
+
+        const rowFp = buildRowFingerprint(item);
         const values = [
-          item.satuanPendidikanId, item.npsn, item.nama, item.bentukPendidikan,
-          item.bentukPendidikanGroup, item.jenisPendidikan, item.statusSatuanPendidikan,
-          item.jenjangPendidikan, item.pembina, item.jalurPendidikan, item.kodeWilayah,
-          item.namaDesa, item.namaKecamatan, item.namaKabupaten, item.namaProvinsi, item.alamatJalan
+          npsn,
+          item.nama ?? '',
+          item.bentukPendidikan ?? null,
+          item.bentukPendidikanGroup ?? null,
+          item.jenisPendidikan ?? null,
+          item.statusSatuanPendidikan ?? null,
+          item.jenjangPendidikan ?? null,
+          item.pembina ?? null,
+          item.jalurPendidikan ?? null,
+          item.namaDesa ?? null,
+          item.namaKecamatan ?? null,
+          item.namaKabupaten ?? null,
+          item.namaProvinsi ?? null,
+          item.alamatJalan ?? null,
+          rowFp,
         ];
 
-        await client.query(query, values);
+        const res = await client.query(UPSERT_SEKOLAH, values);
+        if (res.rowCount === 0) {
+          dilewati++;
+        }
       }
 
+      console.log(`Offset ${offset}: ${dataList.length} baris API, ${dilewati} diskip (fingerprint sama), ${tanpaNpsn} tanpa NPSN.`);
+
       offset += limit;
-      
+
       await client.query('UPDATE status_sinkronisasi SET offset_terakhir = $1 WHERE id = 1;', [offset]);
       await new Promise(resolve => setTimeout(resolve, 1000));
 
