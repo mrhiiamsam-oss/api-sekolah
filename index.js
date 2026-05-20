@@ -56,9 +56,50 @@ const UPSERT_SEKOLAH = `
   WHERE sekolah.row_fp IS DISTINCT FROM EXCLUDED.row_fp
 `;
 
+async function ensureSchema() {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS sekolah (
+      npsn TEXT PRIMARY KEY,
+      nama TEXT NOT NULL DEFAULT '',
+      bentuk_pendidikan TEXT,
+      bentuk_pendidikan_group TEXT,
+      jenis_pendidikan TEXT,
+      status_satuan_pendidikan TEXT,
+      jenjang_pendidikan TEXT,
+      pembina TEXT,
+      jalur_pendidikan TEXT,
+      nama_desa TEXT,
+      nama_kecamatan TEXT,
+      nama_kabupaten TEXT,
+      nama_provinsi TEXT,
+      alamat_jalan TEXT,
+      migrated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      row_fp TEXT
+    );
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_sekolah_nama ON sekolah (nama);
+    CREATE INDEX IF NOT EXISTS idx_sekolah_kabupaten ON sekolah (nama_kabupaten);
+    ALTER TABLE sekolah ADD COLUMN IF NOT EXISTS row_fp TEXT;
+  `);
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS status_sinkronisasi (
+      id SMALLINT PRIMARY KEY CHECK (id = 1),
+      offset_terakhir INTEGER NOT NULL DEFAULT 0,
+      waktu_selesai_terakhir TIMESTAMPTZ
+    );
+    INSERT INTO status_sinkronisasi (id, offset_terakhir)
+    VALUES (1, 0)
+    ON CONFLICT (id) DO NOTHING;
+  `);
+}
+
 async function fetchDataAndInsert() {
   await client.connect();
   console.log("Terhubung ke database Neon.");
+
+  await ensureSchema();
+  console.log("Skema database siap.");
 
   const stateRes = await client.query('SELECT offset_terakhir FROM status_sinkronisasi WHERE id = 1;');
   let offset = parseInt(stateRes.rows[0].offset_terakhir);
