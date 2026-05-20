@@ -1,9 +1,13 @@
 name: Tarik Data API ke Neon
 
 on:
-  workflow_dispatch: # Tombol jalankan manual tetap ada
+  workflow_dispatch: # Tombol manual di dashboard GitHub tetap aktif jika ingin dicoba kapan saja
+  schedule:
+    # Menggunakan standar waktu UTC.
+    # Jam 16:00 UTC itu sama dengan Jam 23:00 WIB atau Jam 00:00 (Minggu dini hari) WITA.
+    # Format cron: 'Menit Jam Hari-dalam-Bulan Bulan Hari-dalam-Minggu' (6 = Sabtu)
+    - cron: '0 16 * * 6'
 
-# Memberikan izin ke server GitHub agar bisa men-trigger ulang workflow ini sendiri
 permissions:
   actions: write
   contents: read
