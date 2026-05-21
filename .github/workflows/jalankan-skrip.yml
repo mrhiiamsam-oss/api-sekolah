@@ -1,3 +1,4 @@
+# Dinonaktifkan: billing GitHub Actions — pakai Cloudflare Workers (lihat CLOUDFLARE.md)
 name: Tarik Data API ke Neon
 
 on:
@@ -19,6 +20,7 @@ permissions:
 
 jobs:
   run-script:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Ambil kode dari repository
