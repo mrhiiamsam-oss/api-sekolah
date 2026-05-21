@@ -9,6 +9,13 @@ function isJadwalMingguanUtc() {
 export default {
   /** Dipanggil otomatis oleh Cloudflare Cron Triggers */
   async scheduled(event, env, ctx) {
+    const now = new Date();
+    // Kasus jika mingguan (atau harian) bertabrakan dengan tanggal 19 (jadwal bulanan GH Actions)
+    if (now.getUTCDate() === 19) {
+      console.log('Tanggal 19: Mengutamakan sinkronisasi bulanan dari GitHub Actions. CF Worker rehat.');
+      return;
+    }
+
     const mulaiDariAwal = isJadwalMingguanUtc();
     ctx.waitUntil(
       runSync(env, { mulaiDariAwal, maxDurationMs: 28000 }).then((result) => {

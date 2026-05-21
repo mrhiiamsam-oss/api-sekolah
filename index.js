@@ -132,7 +132,7 @@ async function catatWaktuSinkronTerakhir(terakhirDicatatMs, paksa = false) {
     return terakhirDicatatMs;
   }
   await client.query(
-    'UPDATE status_sinkronisasi SET waktu_selesai_terakhir = NOW() WHERE id = 1;'
+    'UPDATE status_sinkronisasi SET waktu_selesai_terakhir = NOW() WHERE id = 2;'
   );
   console.log(`Waktu sinkron terakhir dicatat (${new Date().toISOString()}).`);
   return sekarang;
@@ -166,12 +166,12 @@ async function ensureSchema() {
   `);
   await client.query(`
     CREATE TABLE IF NOT EXISTS status_sinkronisasi (
-      id SMALLINT PRIMARY KEY CHECK (id = 1),
+      id SMALLINT PRIMARY KEY CHECK (id IN (1, 2)),
       offset_terakhir INTEGER NOT NULL DEFAULT 0,
       waktu_selesai_terakhir TIMESTAMPTZ
     );
     INSERT INTO status_sinkronisasi (id, offset_terakhir)
-    VALUES (1, 0)
+    VALUES (1, 0), (2, 0)
     ON CONFLICT (id) DO NOTHING;
   `);
 }
@@ -189,11 +189,11 @@ async function fetchDataAndInsert() {
 
   let offset;
   if (mulaiDariAwal) {
-    await client.query('UPDATE status_sinkronisasi SET offset_terakhir = 0 WHERE id = 1;');
+    await client.query('UPDATE status_sinkronisasi SET offset_terakhir = 0 WHERE id = 2;');
     offset = 0;
     console.log('Mulai dari awal (offset direset ke 0).');
   } else {
-    const stateRes = await client.query('SELECT offset_terakhir FROM status_sinkronisasi WHERE id = 1;');
+    const stateRes = await client.query('SELECT offset_terakhir FROM status_sinkronisasi WHERE id = 2;');
     offset = parseInt(stateRes.rows[0].offset_terakhir, 10) || 0;
     console.log(`Melanjutkan sinkronisasi dari offset: ${offset}`);
   }
@@ -228,7 +228,7 @@ async function fetchDataAndInsert() {
         await client.query(`
           UPDATE status_sinkronisasi
           SET offset_terakhir = 0, waktu_selesai_terakhir = NOW()
-          WHERE id = 1;
+          WHERE id = 2;
         `);
         break;
       }
@@ -244,7 +244,7 @@ async function fetchDataAndInsert() {
 
       offset += limit;
 
-      await client.query('UPDATE status_sinkronisasi SET offset_terakhir = $1 WHERE id = 1;', [offset]);
+      await client.query('UPDATE status_sinkronisasi SET offset_terakhir = $1 WHERE id = 2;', [offset]);
       waktuTerakhirDicatat = await catatWaktuSinkronTerakhir(waktuTerakhirDicatat);
 
       const jedaMs = baru === 0 && diperbarui === 0 ? 200 : 1000;

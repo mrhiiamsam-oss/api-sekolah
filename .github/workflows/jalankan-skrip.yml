@@ -1,4 +1,4 @@
-# Dinonaktifkan: billing GitHub Actions — pakai Cloudflare Workers (lihat CLOUDFLARE.md)
+# GitHub Actions berjalan per bulan (setiap tanggal 19), sedangkan Cloudflare Workers untuk mingguan.
 name: Tarik Data API ke Neon
 
 on:
@@ -10,9 +10,10 @@ on:
         default: false
   schedule:
     # Menggunakan standar waktu UTC.
-    # Jam 16:00 UTC itu sama dengan Jam 23:00 WIB atau Jam 00:00 (Minggu dini hari) WITA.
-    # Format cron: 'Menit Jam Hari-dalam-Bulan Bulan Hari-dalam-Minggu' (6 = Sabtu)
-    - cron: '0 16 * * 6'
+    # Jam 16:00 UTC itu sama dengan Jam 23:00 WIB.
+    # Dijalankan setiap tanggal 19 setiap bulan.
+    # Format cron: 'Menit Jam Hari-dalam-Bulan Bulan Hari-dalam-Minggu'
+    - cron: '0 16 19 * *'
 
 permissions:
   actions: write
@@ -20,7 +21,6 @@ permissions:
 
 jobs:
   run-script:
-    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Ambil kode dari repository
@@ -37,7 +37,7 @@ jobs:
       - name: Jalankan Skrip
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          # schedule (mingguan): scan penuh dari offset 0 | manual: sesuai centang | auto-retrigger: lanjut offset
+          # schedule (bulanan): scan penuh dari offset 0 | manual: sesuai centang | auto-retrigger: lanjut offset
           MULAI_DARI_AWAL: ${{ github.event_name == 'schedule' && '1' || (github.event_name == 'workflow_dispatch' && inputs.mulai_dari_awal && '1') || '' }}
         run: node index.js
 
