@@ -2,9 +2,10 @@ import { neon } from '@neondatabase/serverless';
 
 const API_BASE =
   'https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/360';
-const LIMIT = 20;
+const LIMIT = 100;
 const INTERVAL_CATAT_WAKTU_MS = 30 * 60 * 1000;
-/** Cloudflare Free: max 50 subrequest/invokasi. ~3–4 per batch → aman di 10 batch */
+/** Cloudflare Free: max 50 subrequest/invokasi. ~3–4 per batch → aman di 10 batch.
+ * Dengan LIMIT 100, kita bisa memproses hingga 1000 data per menit tanpa terkena limit subrequest. */
 const DEFAULT_MAX_BATCHES = 10;
 const DEFAULT_MAX_SUBREQUESTS = 45;
 
