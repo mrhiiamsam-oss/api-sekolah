@@ -12,6 +12,8 @@ GitHub Actions dibatasi billing? Deploy Worker ini — state offset tetap di Neo
 
 Tidak perlu `lanjutkan.txt` — offset di Neon yang mengatur lanjutan.
 
+**Batas subrequest:** Plan gratis Cloudflare max ~50 fetch/invokasi. Worker memproses ~10 batch per run (cron 5 menit melanjutkan). Jika masih error, upgrade Workers Paid atau set secret `MAX_BATCHES=5`.
+
 ## Persyaratan
 
 - Akun [Cloudflare](https://dash.cloudflare.com) (gratis)

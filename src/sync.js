@@ -4,6 +4,9 @@ const API_BASE =
   'https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/360';
 const LIMIT = 20;
 const INTERVAL_CATAT_WAKTU_MS = 30 * 60 * 1000;
+/** Cloudflare Free: max 50 subrequest/invokasi. ~3–4 per batch → aman di 10 batch */
+const DEFAULT_MAX_BATCHES = 10;
+const DEFAULT_MAX_SUBREQUESTS = 45;
 
 async function sha256Hex(text) {
   const data = new TextEncoder().encode(text);
@@ -30,28 +33,66 @@ async function buildRowFingerprint(item) {
   return sha256Hex(JSON.stringify(payload));
 }
 
-async function upsertSekolah(sql, item, rowFp) {
+/** Satu query untuk semua baris yang berubah di batch (bukan 20 query terpisah). */
+async function bulkUpsertSekolah(sql, toUpsert) {
+  if (toUpsert.length === 0) return;
+
+  const npsn = [];
+  const nama = [];
+  const bentuk_pendidikan = [];
+  const bentuk_pendidikan_group = [];
+  const jenis_pendidikan = [];
+  const status_satuan_pendidikan = [];
+  const jenjang_pendidikan = [];
+  const pembina = [];
+  const jalur_pendidikan = [];
+  const nama_desa = [];
+  const nama_kecamatan = [];
+  const nama_kabupaten = [];
+  const nama_provinsi = [];
+  const alamat_jalan = [];
+  const row_fp = [];
+
+  for (const { item, rowFp } of toUpsert) {
+    npsn.push(item.npsn);
+    nama.push(item.nama ?? '');
+    bentuk_pendidikan.push(item.bentukPendidikan ?? null);
+    bentuk_pendidikan_group.push(item.bentukPendidikanGroup ?? null);
+    jenis_pendidikan.push(item.jenisPendidikan ?? null);
+    status_satuan_pendidikan.push(item.statusSatuanPendidikan ?? null);
+    jenjang_pendidikan.push(item.jenjangPendidikan ?? null);
+    pembina.push(item.pembina ?? null);
+    jalur_pendidikan.push(item.jalurPendidikan ?? null);
+    nama_desa.push(item.namaDesa ?? null);
+    nama_kecamatan.push(item.namaKecamatan ?? null);
+    nama_kabupaten.push(item.namaKabupaten ?? null);
+    nama_provinsi.push(item.namaProvinsi ?? null);
+    alamat_jalan.push(item.alamatJalan ?? null);
+    row_fp.push(rowFp);
+  }
+
   await sql`
     INSERT INTO sekolah (
       npsn, nama, bentuk_pendidikan, bentuk_pendidikan_group, jenis_pendidikan,
       status_satuan_pendidikan, jenjang_pendidikan, pembina, jalur_pendidikan,
       nama_desa, nama_kecamatan, nama_kabupaten, nama_provinsi, alamat_jalan, row_fp
-    ) VALUES (
-      ${item.npsn},
-      ${item.nama ?? ''},
-      ${item.bentukPendidikan ?? null},
-      ${item.bentukPendidikanGroup ?? null},
-      ${item.jenisPendidikan ?? null},
-      ${item.statusSatuanPendidikan ?? null},
-      ${item.jenjangPendidikan ?? null},
-      ${item.pembina ?? null},
-      ${item.jalurPendidikan ?? null},
-      ${item.namaDesa ?? null},
-      ${item.namaKecamatan ?? null},
-      ${item.namaKabupaten ?? null},
-      ${item.namaProvinsi ?? null},
-      ${item.alamatJalan ?? null},
-      ${rowFp}
+    )
+    SELECT * FROM UNNEST(
+      ${npsn}::text[],
+      ${nama}::text[],
+      ${bentuk_pendidikan}::text[],
+      ${bentuk_pendidikan_group}::text[],
+      ${jenis_pendidikan}::text[],
+      ${status_satuan_pendidikan}::text[],
+      ${jenjang_pendidikan}::text[],
+      ${pembina}::text[],
+      ${jalur_pendidikan}::text[],
+      ${nama_desa}::text[],
+      ${nama_kecamatan}::text[],
+      ${nama_kabupaten}::text[],
+      ${nama_provinsi}::text[],
+      ${alamat_jalan}::text[],
+      ${row_fp}::text[]
     )
     ON CONFLICT (npsn) DO UPDATE SET
       nama = EXCLUDED.nama,
@@ -72,6 +113,7 @@ async function upsertSekolah(sql, item, rowFp) {
   `;
 }
 
+/** Hanya jika ENSURE_SCHEMA=1 (setup awal). Menghindari 5+ subrequest tiap run. */
 async function ensureSchema(sql) {
   await sql`
     CREATE TABLE IF NOT EXISTS sekolah (
@@ -91,19 +133,15 @@ async function ensureSchema(sql) {
       alamat_jalan TEXT,
       migrated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       row_fp TEXT
-    )
-  `;
-  await sql`CREATE INDEX IF NOT EXISTS idx_sekolah_nama ON sekolah (nama)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_sekolah_kabupaten ON sekolah (nama_kabupaten)`;
-  await sql`ALTER TABLE sekolah ADD COLUMN IF NOT EXISTS row_fp TEXT`;
-  await sql`
+    );
+    CREATE INDEX IF NOT EXISTS idx_sekolah_nama ON sekolah (nama);
+    CREATE INDEX IF NOT EXISTS idx_sekolah_kabupaten ON sekolah (nama_kabupaten);
+    ALTER TABLE sekolah ADD COLUMN IF NOT EXISTS row_fp TEXT;
     CREATE TABLE IF NOT EXISTS status_sinkronisasi (
       id SMALLINT PRIMARY KEY CHECK (id = 1),
       offset_terakhir INTEGER NOT NULL DEFAULT 0,
       waktu_selesai_terakhir TIMESTAMPTZ
-    )
-  `;
-  await sql`
+    );
     INSERT INTO status_sinkronisasi (id, offset_terakhir)
     VALUES (1, 0)
     ON CONFLICT (id) DO NOTHING
@@ -113,13 +151,14 @@ async function ensureSchema(sql) {
 async function catatWaktuSinkronTerakhir(sql, state, paksa = false) {
   const sekarang = Date.now();
   if (!paksa && sekarang - state.waktuTerakhirDicatat < INTERVAL_CATAT_WAKTU_MS) {
-    return state.waktuTerakhirDicatat;
+    return { waktuTerakhirDicatat: state.waktuTerakhirDicatat, subrequests: 0 };
   }
   await sql`UPDATE status_sinkronisasi SET waktu_selesai_terakhir = NOW() WHERE id = 1`;
-  return sekarang;
+  return { waktuTerakhirDicatat: sekarang, subrequests: 1 };
 }
 
 async function syncBatch(sql, dataList) {
+  let subrequests = 0;
   const prepared = [];
   let tanpaNpsn = 0;
 
@@ -136,25 +175,26 @@ async function syncBatch(sql, dataList) {
   }
 
   if (prepared.length === 0) {
-    return { baru: 0, diperbarui: 0, tidakBerubah: 0, tanpaNpsn };
+    return { baru: 0, diperbarui: 0, tidakBerubah: 0, tanpaNpsn, subrequests: 0 };
   }
 
   const npsnList = prepared.map((p) => p.npsn);
   const rows = await sql`SELECT npsn, row_fp FROM sekolah WHERE npsn = ANY(${npsnList}::text[])`;
+  subrequests += 1;
   const existing = new Map(rows.map((r) => [r.npsn, r.row_fp]));
 
+  const toUpsert = [];
   let baru = 0;
   let diperbarui = 0;
   let tidakBerubah = 0;
 
-  for (const { item, npsn, rowFp } of prepared) {
-    const prevFp = existing.get(npsn);
-    if (prevFp === rowFp) {
+  for (const entry of prepared) {
+    const prevFp = existing.get(entry.npsn);
+    if (prevFp === entry.rowFp) {
       tidakBerubah++;
       continue;
     }
-
-    await upsertSekolah(sql, item, rowFp);
+    toUpsert.push(entry);
     if (prevFp === undefined) {
       baru++;
     } else {
@@ -162,37 +202,57 @@ async function syncBatch(sql, dataList) {
     }
   }
 
-  return { baru, diperbarui, tidakBerubah, tanpaNpsn };
+  if (toUpsert.length > 0) {
+    await bulkUpsertSekolah(sql, toUpsert);
+    subrequests += 1;
+  }
+
+  return { baru, diperbarui, tidakBerubah, tanpaNpsn, subrequests };
 }
 
 /**
- * Satu invokasi Worker: proses batch sampai habis waktu, simpan offset di Neon.
+ * Satu invokasi Worker: proses batch sampai habis waktu / subrequest, simpan offset di Neon.
  */
 export async function runSync(env, { mulaiDariAwal = false, maxDurationMs = 28000 } = {}) {
   if (!env.DATABASE_URL) {
     throw new Error('DATABASE_URL belum diatur di secrets Worker.');
   }
 
+  const maxBatches = parseInt(env.MAX_BATCHES || String(DEFAULT_MAX_BATCHES), 10);
+  const maxSubrequests = parseInt(
+    env.MAX_SUBREQUESTS || String(DEFAULT_MAX_SUBREQUESTS),
+    10
+  );
+
   const sql = neon(env.DATABASE_URL);
   const logs = [];
   const log = (msg) => logs.push(msg);
+  let subrequests = 0;
 
-  await ensureSchema(sql);
-  log('Skema database siap.');
+  if (env.ENSURE_SCHEMA === '1') {
+    await ensureSchema(sql);
+    subrequests += 1;
+    log('Skema database dicek (ENSURE_SCHEMA=1).');
+  }
 
   let offset;
   if (mulaiDariAwal) {
     await sql`UPDATE status_sinkronisasi SET offset_terakhir = 0 WHERE id = 1`;
+    subrequests += 1;
     offset = 0;
     log('Mulai dari awal (offset 0).');
   } else {
     const rows = await sql`SELECT offset_terakhir FROM status_sinkronisasi WHERE id = 1`;
+    subrequests += 1;
     offset = parseInt(rows[0]?.offset_terakhir, 10) || 0;
     log(`Melanjutkan dari offset: ${offset}`);
   }
 
   const startedAt = Date.now();
-  let waktuTerakhirDicatat = await catatWaktuSinkronTerakhir(sql, { waktuTerakhirDicatat: 0 }, true);
+  let waktuTerakhirDicatat = 0;
+  const waktuAwal = await catatWaktuSinkronTerakhir(sql, { waktuTerakhirDicatat: 0 }, true);
+  waktuTerakhirDicatat = waktuAwal.waktuTerakhirDicatat;
+  subrequests += waktuAwal.subrequests;
 
   let batches = 0;
   let totalBaru = 0;
@@ -201,13 +261,18 @@ export async function runSync(env, { mulaiDariAwal = false, maxDurationMs = 2800
   let selesai = false;
   let alasanBerhenti = 'waktu_habis';
 
-  while (Date.now() - startedAt < maxDurationMs) {
+  while (
+    Date.now() - startedAt < maxDurationMs &&
+    batches < maxBatches &&
+    subrequests < maxSubrequests
+  ) {
     const url = `${API_BASE}?limit=${LIMIT}&offset=${offset}`;
     log(`Mengecek API offset ${offset}...`);
 
     let dataList;
     try {
       const response = await fetch(url);
+      subrequests += 1;
       const result = await response.json();
       dataList = result.data;
     } catch (err) {
@@ -222,6 +287,7 @@ export async function runSync(env, { mulaiDariAwal = false, maxDurationMs = 2800
         SET offset_terakhir = 0, waktu_selesai_terakhir = NOW()
         WHERE id = 1
       `;
+      subrequests += 1;
       selesai = true;
       alasanBerhenti = 'selesai';
       log('Sinkronisasi selesai 100%. Offset direset ke 0.');
@@ -229,6 +295,7 @@ export async function runSync(env, { mulaiDariAwal = false, maxDurationMs = 2800
     }
 
     const stats = await syncBatch(sql, dataList);
+    subrequests += stats.subrequests;
     totalBaru += stats.baru;
     totalDiperbarui += stats.diperbarui;
     totalTidakBerubah += stats.tidakBerubah;
@@ -240,17 +307,28 @@ export async function runSync(env, { mulaiDariAwal = false, maxDurationMs = 2800
 
     offset += LIMIT;
     await sql`UPDATE status_sinkronisasi SET offset_terakhir = ${offset} WHERE id = 1`;
-    waktuTerakhirDicatat = await catatWaktuSinkronTerakhir(sql, { waktuTerakhirDicatat });
+    subrequests += 1;
+    const waktu = await catatWaktuSinkronTerakhir(sql, { waktuTerakhirDicatat });
+    waktuTerakhirDicatat = waktu.waktuTerakhirDicatat;
+    subrequests += waktu.subrequests;
     batches++;
 
-    if (stats.baru > 0 || stats.diperbarui > 0) {
-      await new Promise((r) => setTimeout(r, 300));
+    if (subrequests >= maxSubrequests) {
+      alasanBerhenti = 'batas_subrequest';
+      log(`Mencapai batas subrequest (~${maxSubrequests}). Cron berikutnya melanjutkan.`);
+      break;
     }
   }
 
+  if (!selesai && alasanBerhenti === 'waktu_habis' && batches >= maxBatches) {
+    alasanBerhenti = 'batas_batch';
+    log(`Mencapai batas ${maxBatches} batch per invokasi. Cron berikutnya melanjutkan.`);
+  }
+
   if (!selesai) {
-    waktuTerakhirDicatat = await catatWaktuSinkronTerakhir(sql, { waktuTerakhirDicatat }, true);
-    log(`Berhenti (${alasanBerhenti}). Offset tersimpan: ${offset}. Cron berikutnya melanjutkan.`);
+    const waktu = await catatWaktuSinkronTerakhir(sql, { waktuTerakhirDicatat }, true);
+    subrequests += waktu.subrequests;
+    log(`Berhenti (${alasanBerhenti}). Offset tersimpan: ${offset}.`);
   }
 
   return {
@@ -259,6 +337,7 @@ export async function runSync(env, { mulaiDariAwal = false, maxDurationMs = 2800
     alasanBerhenti,
     offsetBerikutnya: selesai ? 0 : offset,
     batches,
+    subrequests,
     totalBaru,
     totalDiperbarui,
     totalTidakBerubah,
