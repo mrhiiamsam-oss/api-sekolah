@@ -2,7 +2,6 @@ name = "fetch-data-belajar-sync"
 main = "src/index.js"
 compatibility_date = "2024-08-01"
 
-# Setiap 5 menit: lanjutkan sinkron dari offset tersimpan
-# Sabtu 16:00 UTC (23:00 WIB): scan penuh dari offset 0
+# Setiap 1 menit (reset mingguan Sabtu 16:00 UTC ditangani di src/index.js)
 [triggers]
-crons = ["*/5 * * * *", "0 16 * * 6"]
+crons = ["* * * * *"]

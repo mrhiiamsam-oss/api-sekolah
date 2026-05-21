@@ -6,13 +6,15 @@ GitHub Actions dibatasi billing? Deploy Worker ini — state offset tetap di Neo
 
 | Trigger | Perilaku |
 |---------|----------|
-| **Cron `*/5 * * * *`** | Setiap 5 menit, proses batch ~28 detik, simpan `offset_terakhir`, lalu berhenti |
+| **Cron `* * * * *`** | Setiap 1 menit, proses ~10 batch (~28 detik), simpan `offset_terakhir`, lalu berhenti |
 | **Cron `0 16 * * 6`** | Sabtu 23:00 WIB — mulai dari **offset 0** (scan mingguan) |
 | **GET `/sync?secret=...`** | Jalankan manual (lanjut atau `&awal=1`) |
 
 Tidak perlu `lanjutkan.txt` — offset di Neon yang mengatur lanjutan.
 
-**Batas subrequest:** Plan gratis Cloudflare max ~50 fetch/invokasi. Worker memproses ~10 batch per run (cron 5 menit melanjutkan). Jika masih error, upgrade Workers Paid atau set secret `MAX_BATCHES=5`.
+**Batas subrequest:** Plan gratis Cloudflare max ~50 fetch/invokasi. Worker memproses ~10 batch per run (cron 1 menit melanjutkan). Jika masih error, upgrade Workers Paid atau set secret `MAX_BATCHES=5`.
+
+**Cron tiap 1 menit:** Aman jika satu run ~10–15 detik (tidak overlap). ~600 panggilan API belajar.id/jam saat offset masih jauh dari selesai — pantau jika API rate-limit.
 
 ## Persyaratan
 
