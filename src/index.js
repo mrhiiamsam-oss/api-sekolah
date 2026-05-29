@@ -10,9 +10,9 @@ export default {
   /** Dipanggil otomatis oleh Cloudflare Cron Triggers */
   async scheduled(event, env, ctx) {
     const now = new Date();
-    // Kasus jika mingguan (atau harian) bertabrakan dengan tanggal 19 (jadwal bulanan GH Actions)
-    if (now.getUTCDate() === 19) {
-      console.log('Tanggal 19: Mengutamakan sinkronisasi bulanan dari GitHub Actions. CF Worker rehat.');
+    // Kasus jika mingguan (atau harian) bertabrakan dengan tanggal 1 (jadwal bulanan GH Actions)
+    if (now.getUTCDate() === 1) {
+      console.log('Tanggal 1: Mengutamakan sinkronisasi bulanan dari GitHub Actions. CF Worker rehat.');
       return;
     }
 
