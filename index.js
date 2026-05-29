@@ -166,10 +166,12 @@ async function ensureSchema() {
   `);
   await client.query(`
     CREATE TABLE IF NOT EXISTS status_sinkronisasi (
-      id SMALLINT PRIMARY KEY CHECK (id IN (1, 2)),
+      id SMALLINT PRIMARY KEY,
       offset_terakhir INTEGER NOT NULL DEFAULT 0,
       waktu_selesai_terakhir TIMESTAMPTZ
     );
+    ALTER TABLE status_sinkronisasi DROP CONSTRAINT IF EXISTS status_sinkronisasi_id_check;
+    ALTER TABLE status_sinkronisasi ADD CONSTRAINT status_sinkronisasi_id_check CHECK (id IN (1, 2));
     INSERT INTO status_sinkronisasi (id, offset_terakhir)
     VALUES (1, 0), (2, 0)
     ON CONFLICT (id) DO NOTHING;

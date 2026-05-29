@@ -1,4 +1,4 @@
-# GitHub Actions berjalan per bulan (setiap tanggal 19), sedangkan Cloudflare Workers untuk mingguan.
+# GitHub Actions berjalan per bulan (setiap tanggal 1), sedangkan Cloudflare Workers untuk mingguan.
 name: Tarik Data API ke Neon
 
 on:
@@ -11,9 +11,9 @@ on:
   schedule:
     # Menggunakan standar waktu UTC.
     # Jam 16:00 UTC itu sama dengan Jam 23:00 WIB.
-    # Dijalankan setiap tanggal 19 setiap bulan.
+    # Dijalankan setiap tanggal 1 setiap bulan.
     # Format cron: 'Menit Jam Hari-dalam-Bulan Bulan Hari-dalam-Minggu'
-    - cron: '0 16 19 * *'
+    - cron: '0 16 1 * *'
 
 permissions:
   actions: write
