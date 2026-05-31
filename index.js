@@ -124,7 +124,7 @@ async function syncBatch(dataList) {
   return { baru, diperbarui, tidakBerubah, tanpaNpsn };
 }
 
-const INTERVAL_CATAT_WAKTU_MS = 30 * 60 * 1000; // 30 menit
+const INTERVAL_CATAT_WAKTU_MS = 60 * 60 * 1000; // 1 jam
 
 async function catatWaktuSinkronTerakhir(terakhirDicatatMs, paksa = false) {
   const sekarang = Date.now();
