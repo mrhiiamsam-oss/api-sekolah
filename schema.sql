@@ -24,6 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_sekolah_kabupaten ON sekolah (nama_kabupaten);
 
 CREATE TABLE IF NOT EXISTS status_sinkronisasi (
   id SMALLINT PRIMARY KEY CHECK (id IN (1, 2)),
+  bentuk_aktif TEXT,
   offset_terakhir INTEGER NOT NULL DEFAULT 0,
   waktu_selesai_terakhir TIMESTAMPTZ
 );

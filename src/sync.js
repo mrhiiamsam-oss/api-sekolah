@@ -9,6 +9,8 @@ const INTERVAL_CATAT_WAKTU_MS = 60 * 60 * 1000;
 const DEFAULT_MAX_BATCHES = 10;
 const DEFAULT_MAX_SUBREQUESTS = 45;
 
+const VALID_BENTUK = ['tk', 'kb', 'sps', 'tpa', 'paudq', 'sd', 'smp', 'sma', 'smk', 'slb', 'skb', 'pkbm', 'kursus', 'ra', 'mi', 'mts', 'ma'];
+
 async function sha256Hex(text) {
   const data = new TextEncoder().encode(text);
   const hash = await crypto.subtle.digest('SHA-256', data);
@@ -145,8 +147,9 @@ async function ensureSchema(sql) {
     );
     ALTER TABLE status_sinkronisasi DROP CONSTRAINT IF EXISTS status_sinkronisasi_id_check;
     ALTER TABLE status_sinkronisasi ADD CONSTRAINT status_sinkronisasi_id_check CHECK (id IN (1, 2));
-    INSERT INTO status_sinkronisasi (id, offset_terakhir)
-    VALUES (1, 0), (2, 0)
+    ALTER TABLE status_sinkronisasi ADD COLUMN IF NOT EXISTS bentuk_aktif TEXT;
+    INSERT INTO status_sinkronisasi (id, offset_terakhir, bentuk_aktif)
+    VALUES (1, 0, 'tk'), (2, 0, 'tk')
     ON CONFLICT (id) DO NOTHING
   `;
 }
@@ -238,17 +241,21 @@ export async function runSync(env, { mulaiDariAwal = false, maxDurationMs = 2800
     log('Skema database dicek (ENSURE_SCHEMA=1).');
   }
 
+  let bentukAktif;
   let offset;
   if (mulaiDariAwal) {
-    await sql`UPDATE status_sinkronisasi SET offset_terakhir = 0 WHERE id = 1`;
+    await sql`UPDATE status_sinkronisasi SET bentuk_aktif = 'tk', offset_terakhir = 0 WHERE id = 1`;
     subrequests += 1;
+    bentukAktif = 'tk';
     offset = 0;
-    log('Mulai dari awal (offset 0).');
+    log('Mulai dari awal (bentuk direset ke tk, offset direset ke 0).');
   } else {
-    const rows = await sql`SELECT offset_terakhir FROM status_sinkronisasi WHERE id = 1`;
+    const rows = await sql`SELECT bentuk_aktif, offset_terakhir FROM status_sinkronisasi WHERE id = 1`;
     subrequests += 1;
-    offset = parseInt(rows[0]?.offset_terakhir, 10) || 0;
-    log(`Melanjutkan dari offset: ${offset}`);
+    const row = rows[0];
+    bentukAktif = row?.bentuk_aktif || 'tk';
+    offset = parseInt(row?.offset_terakhir, 10) || 0;
+    log(`Melanjutkan sinkronisasi [${bentukAktif.toUpperCase()}] dari offset: ${offset}`);
   }
 
   const startedAt = Date.now();
@@ -269,8 +276,8 @@ export async function runSync(env, { mulaiDariAwal = false, maxDurationMs = 2800
     batches < maxBatches &&
     subrequests < maxSubrequests
   ) {
-    const url = `${API_BASE}?limit=${LIMIT}&offset=${offset}`;
-    log(`Mengecek API offset ${offset}...`);
+    const url = `${API_BASE}?limit=${LIMIT}&offset=${offset}&bentukPendidikan=${bentukAktif}`;
+    log(`Mengecek API [${bentukAktif.toUpperCase()}] offset ${offset}...`);
 
     let dataList;
     try {
@@ -285,16 +292,28 @@ export async function runSync(env, { mulaiDariAwal = false, maxDurationMs = 2800
     }
 
     if (!dataList || dataList.length === 0) {
-      await sql`
-        UPDATE status_sinkronisasi
-        SET offset_terakhir = 0, waktu_selesai_terakhir = NOW()
-        WHERE id = 1
-      `;
-      subrequests += 1;
-      selesai = true;
-      alasanBerhenti = 'selesai';
-      log('Sinkronisasi selesai 100%. Offset direset ke 0.');
-      break;
+      const currentIndex = VALID_BENTUK.indexOf(bentukAktif);
+      const nextIndex = currentIndex + 1;
+
+      if (nextIndex < VALID_BENTUK.length) {
+        bentukAktif = VALID_BENTUK[nextIndex];
+        offset = 0;
+        log(`➡️ Selesai untuk tipe sekolah ini. Pindah ke bentuk pendidikan berikutnya: [${bentukAktif.toUpperCase()}]`);
+        await sql`UPDATE status_sinkronisasi SET bentuk_aktif = ${bentukAktif}, offset_terakhir = 0 WHERE id = 1`;
+        subrequests += 1;
+        continue;
+      } else {
+        await sql`
+          UPDATE status_sinkronisasi
+          SET bentuk_aktif = 'tk', offset_terakhir = 0, waktu_selesai_terakhir = NOW()
+          WHERE id = 1
+        `;
+        subrequests += 1;
+        selesai = true;
+        alasanBerhenti = 'selesai';
+        log('Sinkronisasi selesai 100%. Semua bentuk pendidikan disinkronkan.');
+        break;
+      }
     }
 
     const stats = await syncBatch(sql, dataList);
@@ -304,7 +323,7 @@ export async function runSync(env, { mulaiDariAwal = false, maxDurationMs = 2800
     totalTidakBerubah += stats.tidakBerubah;
 
     log(
-      `Offset ${offset}: ${dataList.length} dari API — ` +
+      `Offset ${offset} [${bentukAktif}]: ${dataList.length} dari API — ` +
         `${stats.tidakBerubah} tidak berubah, ${stats.baru} baru, ${stats.diperbarui} diperbarui.`
     );
 
@@ -331,7 +350,7 @@ export async function runSync(env, { mulaiDariAwal = false, maxDurationMs = 2800
   if (!selesai) {
     const waktu = await catatWaktuSinkronTerakhir(sql, { waktuTerakhirDicatat }, true);
     subrequests += waktu.subrequests;
-    log(`Berhenti (${alasanBerhenti}). Offset tersimpan: ${offset}.`);
+    log(`Berhenti (${alasanBerhenti}). Offset tersimpan: ${offset} [${bentukAktif}].`);
   }
 
   return {
@@ -339,6 +358,7 @@ export async function runSync(env, { mulaiDariAwal = false, maxDurationMs = 2800
     selesai,
     alasanBerhenti,
     offsetBerikutnya: selesai ? 0 : offset,
+    bentukBerikutnya: selesai ? 'tk' : bentukAktif,
     batches,
     subrequests,
     totalBaru,

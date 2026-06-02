@@ -12,6 +12,8 @@ if (!connectionString) {
 
 const client = new Client({ connectionString });
 
+const VALID_BENTUK = ['tk', 'kb', 'sps', 'tpa', 'paudq', 'sd', 'smp', 'sma', 'smk', 'slb', 'skb', 'pkbm', 'kursus', 'ra', 'mi', 'mts', 'ma'];
+
 function buildRowFingerprint(item) {
   const payload = {
     nama: item.nama ?? '',
@@ -172,8 +174,9 @@ async function ensureSchema() {
     );
     ALTER TABLE status_sinkronisasi DROP CONSTRAINT IF EXISTS status_sinkronisasi_id_check;
     ALTER TABLE status_sinkronisasi ADD CONSTRAINT status_sinkronisasi_id_check CHECK (id IN (1, 2));
-    INSERT INTO status_sinkronisasi (id, offset_terakhir)
-    VALUES (1, 0), (2, 0)
+    ALTER TABLE status_sinkronisasi ADD COLUMN IF NOT EXISTS bentuk_aktif TEXT;
+    INSERT INTO status_sinkronisasi (id, offset_terakhir, bentuk_aktif)
+    VALUES (1, 0, 'tk'), (2, 0, 'tk')
     ON CONFLICT (id) DO NOTHING;
   `);
 }
@@ -189,15 +192,19 @@ async function fetchDataAndInsert() {
     process.argv.includes('--awal') ||
     ['1', 'true', 'yes'].includes(String(process.env.MULAI_DARI_AWAL || '').toLowerCase());
 
+  let bentukAktif;
   let offset;
   if (mulaiDariAwal) {
-    await client.query('UPDATE status_sinkronisasi SET offset_terakhir = 0 WHERE id = 2;');
+    await client.query("UPDATE status_sinkronisasi SET bentuk_aktif = 'tk', offset_terakhir = 0 WHERE id = 2;");
+    bentukAktif = 'tk';
     offset = 0;
-    console.log('Mulai dari awal (offset direset ke 0).');
+    console.log('Mulai dari awal (bentuk direset ke tk, offset direset ke 0).');
   } else {
-    const stateRes = await client.query('SELECT offset_terakhir FROM status_sinkronisasi WHERE id = 2;');
-    offset = parseInt(stateRes.rows[0].offset_terakhir, 10) || 0;
-    console.log(`Melanjutkan sinkronisasi dari offset: ${offset}`);
+    const stateRes = await client.query('SELECT bentuk_aktif, offset_terakhir FROM status_sinkronisasi WHERE id = 2;');
+    const row = stateRes.rows[0];
+    bentukAktif = row.bentuk_aktif || 'tk';
+    offset = parseInt(row.offset_terakhir, 10) || 0;
+    console.log(`Melanjutkan sinkronisasi [${bentukAktif.toUpperCase()}] dari offset: ${offset}`);
   }
 
   const limit = 20;
@@ -215,30 +222,44 @@ async function fetchDataAndInsert() {
       break;
     }
 
-    const url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/360?limit=${limit}&offset=${offset}`;
+    const url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/360?limit=${limit}&offset=${offset}&bentukPendidikan=${bentukAktif}`;
 
     try {
-      console.log(`Mengecek API offset ${offset}...`);
+      console.log(`Mengecek API [${bentukAktif.toUpperCase()}] offset ${offset}...`);
       const response = await fetch(url);
       const result = await response.json();
       const dataList = result.data;
 
       if (!dataList || dataList.length === 0) {
-        hasMoreData = false;
-        console.log("🎉 SINKRONISASI SELESAI! Semua data telah dicek.");
+        const currentIndex = VALID_BENTUK.indexOf(bentukAktif);
+        const nextIndex = currentIndex + 1;
 
-        await client.query(`
-          UPDATE status_sinkronisasi
-          SET offset_terakhir = 0, waktu_selesai_terakhir = NOW()
-          WHERE id = 2;
-        `);
-        break;
+        if (nextIndex < VALID_BENTUK.length) {
+          bentukAktif = VALID_BENTUK[nextIndex];
+          offset = 0;
+          console.log(`➡️ Selesai untuk tipe sekolah ini. Pindah ke bentuk pendidikan berikutnya: [${bentukAktif.toUpperCase()}]`);
+          await client.query(
+            'UPDATE status_sinkronisasi SET bentuk_aktif = $1, offset_terakhir = 0 WHERE id = 2;',
+            [bentukAktif]
+          );
+          continue;
+        } else {
+          hasMoreData = false;
+          console.log("🎉 SINKRONISASI SELESAI PENUH! Semua bentuk pendidikan telah disinkronkan.");
+
+          await client.query(`
+            UPDATE status_sinkronisasi
+            SET bentuk_aktif = 'tk', offset_terakhir = 0, waktu_selesai_terakhir = NOW()
+            WHERE id = 2;
+          `);
+          break;
+        }
       }
 
       const { baru, diperbarui, tidakBerubah, tanpaNpsn } = await syncBatch(dataList);
 
       console.log(
-        `Offset ${offset}: ${dataList.length} dari API — ` +
+        `Offset ${offset} [${bentukAktif}]: ${dataList.length} dari API — ` +
         `${tidakBerubah} tidak berubah, ${baru} baru, ${diperbarui} diperbarui` +
         (tanpaNpsn ? `, ${tanpaNpsn} tanpa NPSN` : '') +
         '.'
