@@ -31,8 +31,7 @@ export default {
     if (url.pathname === '/' || url.pathname === '') {
       return new Response(
         'Sinkron sekolah → Neon.\n' +
-          'Cron: setiap 1 menit (lanjut) + Sabtu 16:00 UTC (dari awal).\n' +
-          'Manual: GET /sync?secret=CRON_SECRET&awal=0|1\n',
+          'Manual Only: GET /sync?secret=CRON_SECRET&awal=0|1\n',
         { headers: { 'content-type': 'text/plain; charset=utf-8' } }
       );
     }
