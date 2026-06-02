@@ -25,7 +25,7 @@ export default {
   },
 
   /** Trigger manual: GET /sync?secret=...&awal=1 */
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (url.pathname === '/' || url.pathname === '') {
@@ -51,7 +51,25 @@ export default {
       url.searchParams.get('awal') === 'true';
 
     try {
-      const result = await runSync(env, { mulaiDariAwal, maxDurationMs: 28000 });
+      const result = await runSync(env, { mulaiDariAwal, maxDurationMs: 22000 });
+
+      // Jika belum selesai, panggil dirinya sendiri secara asinkron untuk melanjutkan
+      if (!result.selesai) {
+        const nextUrl = new URL(request.url);
+        nextUrl.searchParams.set('awal', 'false');
+
+        ctx.waitUntil(
+          fetch(nextUrl.toString(), {
+            headers: {
+              'x-cron-secret': env.CRON_SECRET || '',
+            }
+          })
+          .then(res => res.text())
+          .then(txt => console.log('Chained run response:', txt.substring(0, 200)))
+          .catch(err => console.error('Chained run error:', err))
+        );
+      }
+
       return Response.json(result, {
         headers: { 'content-type': 'application/json; charset=utf-8' },
       });
