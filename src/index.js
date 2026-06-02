@@ -71,8 +71,12 @@ export default {
 <html lang="id">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sekolah Sync Dashboard</title>
   <style>
+    * {
+      box-sizing: border-box;
+    }
     body {
       font-family: 'Inter', sans-serif;
       background: radial-gradient(circle at top left, #12131a, #0b0c10);
@@ -82,6 +86,7 @@ export default {
       align-items: center;
       min-height: 100vh;
       margin: 0;
+      padding: 16px;
     }
     .card {
       background: rgba(255, 255, 255, 0.03);
@@ -89,9 +94,11 @@ export default {
       border: 1px solid rgba(255, 255, 255, 0.05);
       border-radius: 24px;
       padding: 40px;
-      width: 450px;
+      width: 100%;
+      max-width: 450px;
       box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
       text-align: center;
+      margin: auto;
     }
     h1 {
       margin-top: 0;
@@ -168,6 +175,22 @@ export default {
       font-size: 12px;
       color: #6b7280;
       margin-top: 24px;
+    }
+    @media (max-width: 480px) {
+      .card {
+        padding: 24px 16px;
+        border-radius: 16px;
+      }
+      h1 {
+        font-size: 20px;
+      }
+      .stat-val {
+        font-size: 18px;
+      }
+      .grid {
+        gap: 12px;
+        margin-top: 16px;
+      }
     }
   </style>
 </head>
