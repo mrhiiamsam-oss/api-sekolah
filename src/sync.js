@@ -9,7 +9,14 @@ const INTERVAL_CATAT_WAKTU_MS = 60 * 60 * 1000;
 const DEFAULT_MAX_BATCHES = 10;
 const DEFAULT_MAX_SUBREQUESTS = 45;
 
-export const VALID_BENTUK = ['tk', 'kb', 'sps', 'tpa', 'paudq', 'sd', 'smp', 'sma', 'smk', 'slb', 'skb', 'pkbm', 'kursus', 'ra', 'mi', 'mts', 'ma'];
+export const VALID_BENTUK = [
+  'tk', 'kb', 'sps', 'tpa', 'paudq', 'sd', 'smp', 'sma', 'smk', 'slb',
+  'skb', 'pkbm', 'kursus', 'ra', 'mi', 'mts', 'ma',
+  'smak', 'smptk', 'smtk', 'sdtk', 'spk-kb', 'spk-sd', 'spk-sma', 'spk-smp', 'spk-tk',
+  'spm-ula', 'spm-ulya', 'spm-wustha', 'taman-seminari', 'pdf-ulya', 'pdf-wustha',
+  'mak', 'mula-dhammasekha', 'nava-dhammasekha', 'uttama-dhammasekha', 'pondok-pesantren',
+  'smag-k'
+];
 
 async function sha256Hex(text) {
   const data = new TextEncoder().encode(text);

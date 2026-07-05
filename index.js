@@ -12,7 +12,14 @@ if (!connectionString) {
 
 const client = new Client({ connectionString });
 
-const VALID_BENTUK = ['tk', 'kb', 'sps', 'tpa', 'paudq', 'sd', 'smp', 'sma', 'smk', 'slb', 'skb', 'pkbm', 'kursus', 'ra', 'mi', 'mts', 'ma'];
+const VALID_BENTUK = [
+  'tk', 'kb', 'sps', 'tpa', 'paudq', 'sd', 'smp', 'sma', 'smk', 'slb',
+  'skb', 'pkbm', 'kursus', 'ra', 'mi', 'mts', 'ma',
+  'smak', 'smptk', 'smtk', 'sdtk', 'spk-kb', 'spk-sd', 'spk-sma', 'spk-smp', 'spk-tk',
+  'spm-ula', 'spm-ulya', 'spm-wustha', 'taman-seminari', 'pdf-ulya', 'pdf-wustha',
+  'mak', 'mula-dhammasekha', 'nava-dhammasekha', 'uttama-dhammasekha', 'pondok-pesantren',
+  'smag-k'
+];
 
 function buildRowFingerprint(item) {
   const payload = {
