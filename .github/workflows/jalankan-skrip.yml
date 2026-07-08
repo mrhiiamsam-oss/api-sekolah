@@ -11,9 +11,8 @@ on:
   schedule:
     # Menggunakan standar waktu UTC.
     # Jam 16:00 UTC itu sama dengan Jam 23:00 WIB.
-    # Dijalankan setiap tanggal 1 setiap bulan.
-    # Format cron: 'Menit Jam Hari-dalam-Bulan Bulan Hari-dalam-Minggu'
-    - cron: '0 16 1 * *'
+    # Dijalankan setiap hari SELASA, namun kita akan filter agar hanya memproses di Selasa pertama (tanggal 1 - 7).
+    - cron: '0 16 * * 2'
 
 permissions:
   actions: write
@@ -23,18 +22,40 @@ jobs:
   run-script:
     runs-on: ubuntu-latest
     steps:
+      - name: Verifikasi Selasa Pertama
+        id: filter_hari
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            # Ambil tanggal hari ini berdasarkan UTC (saat jam 16:00 UTC = 23:00 WIB, tanggalnya sama)
+            DAY=$(date +%d | sed 's/^0*//')
+            if [ $DAY -le 7 ]; then
+              echo "Bulan ini tanggal $DAY, ini adalah Selasa pertama! Melanjutkan aksi..."
+              echo "should_run=true" >> $GITHUB_OUTPUT
+            else
+              echo "Hari ini tanggal $DAY. Ini BUKAN Selasa pertama. Aksi dihentikan secara graceful."
+              echo "should_run=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "Bukan trigger otomatis (schedule). Melanjutkan aksi..."
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Ambil kode dari repository
+        if: steps.filter_hari.outputs.should_run == 'true'
         uses: actions/checkout@v3
 
       - name: Siapkan Node.js
+        if: steps.filter_hari.outputs.should_run == 'true'
         uses: actions/setup-node@v3
         with:
           node-version: '18'
 
       - name: Install module
+        if: steps.filter_hari.outputs.should_run == 'true'
         run: npm install
 
       - name: Jalankan Skrip
+        if: steps.filter_hari.outputs.should_run == 'true'
         env:
           CLOUDFLARE_WORKER_URL: ${{ secrets.CLOUDFLARE_WORKER_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
@@ -43,6 +64,7 @@ jobs:
         run: node index.js
 
       - name: Jalankan Ulang Otomatis Jika Belum Selesai
+        if: steps.filter_hari.outputs.should_run == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
