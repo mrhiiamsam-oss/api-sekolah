@@ -12,9 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@neondatabase/serverless": "^0.10.4",
-    "dotenv": "^17.4.2",
-    "pg": "^8.21.0"
+    "dotenv": "^17.4.2"
   },
   "devDependencies": {
     "wrangler": "^3.114.0"

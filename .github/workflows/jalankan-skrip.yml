@@ -1,5 +1,5 @@
 # GitHub Actions berjalan per bulan (setiap tanggal 1), sedangkan Cloudflare Workers untuk mingguan.
-name: Tarik Data API ke Neon
+name: Trigger Cloudflare Worker Sync (D1)
 
 on:
   workflow_dispatch:
@@ -31,12 +31,13 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install module PostgreSQL
+      - name: Install module
         run: npm install
 
       - name: Jalankan Skrip
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CLOUDFLARE_WORKER_URL: ${{ secrets.CLOUDFLARE_WORKER_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
           # schedule (bulanan): scan penuh dari offset 0 | manual: sesuai centang | auto-retrigger: lanjut offset
           MULAI_DARI_AWAL: ${{ github.event_name == 'schedule' && '1' || (github.event_name == 'workflow_dispatch' && inputs.mulai_dari_awal && '1') || '' }}
         run: node index.js
@@ -50,4 +51,4 @@ jobs:
             gh workflow run jalankan-skrip.yml -f mulai_dari_awal=false
           else
             echo "Selesai! Tidak ada data tersisa untuk ditarik."
-          fi
+          fi
