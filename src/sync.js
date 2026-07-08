@@ -91,8 +91,8 @@ export async function syncBatch(db, dataList) {
         INSERT INTO sekolah (
           npsn, nama, bentuk_pendidikan, bentuk_pendidikan_group, jenis_pendidikan,
           status_satuan_pendidikan, jenjang_pendidikan, pembina, jalur_pendidikan,
-          nama_desa, nama_kecamatan, nama_kabupaten, nama_provinsi, alamat_jalan, row_fp
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          nama_desa, nama_kecamatan, nama_kabupaten, nama_provinsi, alamat_jalan, row_fp, migrated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+7 hours'))
         ON CONFLICT(npsn) DO UPDATE SET
           nama = excluded.nama,
           bentuk_pendidikan = excluded.bentuk_pendidikan,
@@ -107,7 +107,8 @@ export async function syncBatch(db, dataList) {
           nama_kabupaten = excluded.nama_kabupaten,
           nama_provinsi = excluded.nama_provinsi,
           alamat_jalan = excluded.alamat_jalan,
-          row_fp = excluded.row_fp
+          row_fp = excluded.row_fp,
+          migrated_at = datetime('now', '+7 hours')
       `).bind(
         item.npsn,
         item.nama ?? '',
@@ -128,6 +129,13 @@ export async function syncBatch(db, dataList) {
     });
 
     await db.batch(statements);
+  }
+
+  // Update migrated_at untuk sekolah yang tidak berubah agar terhindar dari pembersihan otomatis
+  const npsnTidakBerubah = prepared.filter(p => existing.get(p.npsn) === p.rowFp).map(p => p.npsn);
+  if (npsnTidakBerubah.length > 0) {
+    const placeholdersTidakBerubah = npsnTidakBerubah.map(() => '?').join(',');
+    await db.prepare(`UPDATE sekolah SET migrated_at = datetime('now', '+7 hours') WHERE npsn IN (${placeholdersTidakBerubah})`).bind(...npsnTidakBerubah).run();
   }
 
   return { baru, diperbarui, tidakBerubah, tanpaNpsn };
