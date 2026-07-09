@@ -36,9 +36,8 @@ const PROVINCES = {
 };
 
 async function postBatchToWorker(dataList, bentukAktif, offset, isFinished, customSyncParams = null) {
-  const payload = { dataList, bentukAktif, offset, isFinished };
+  const payload = { dataList, bentukAktif, offset, isFinished, customSync: true };
   if (customSyncParams) {
-    payload.customSync = true;
     payload.bentukList = customSyncParams.bentukList;
     payload.namaProvinsi = customSyncParams.namaProvinsi;
     payload.waktuMulai = customSyncParams.waktuMulai;

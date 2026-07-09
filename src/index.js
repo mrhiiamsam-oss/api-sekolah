@@ -211,12 +211,8 @@ export default {
 
             const delRes = await env.DB.prepare(query).bind(...params).run();
             stats.dihapus = delRes.meta.changes;
-
-            await env.DB.prepare(`
-              UPDATE status_sinkronisasi 
-              SET total_dihapus = total_dihapus + ? 
-              WHERE id = 1
-            `).bind(stats.dihapus).run();
+            // Untuk customSync, kita TIDAK mengupdate tabel status_sinkronisasi
+            // agar angka di dashboard web (yang ditujukan untuk Full Sync) tidak terpengaruh.
           } else {
             await env.DB.prepare(`
               UPDATE status_sinkronisasi 
@@ -245,14 +241,17 @@ export default {
           `).bind(stats.dihapus).run();
           
         } else {
-          await env.DB.prepare(`
-            UPDATE status_sinkronisasi 
-            SET bentuk_aktif = ?, offset_terakhir = ?, updated_at = datetime('now', '+7 hours')
-            ${resetStats ? resetStats : ', total_baru = total_baru + ?, total_diperbarui = total_diperbarui + ?, total_tidak_berubah = total_tidak_berubah + ?'}
-            WHERE id = 1
-          `).bind(
-            ...(resetStats ? [bentukAktif, offset] : [bentukAktif, offset, stats.baru, stats.diperbarui, stats.tidakBerubah])
-          ).run();
+          // Hanya update status untuk Full Sync
+          if (!body.customSync) {
+            await env.DB.prepare(`
+              UPDATE status_sinkronisasi 
+              SET bentuk_aktif = ?, offset_terakhir = ?, updated_at = datetime('now', '+7 hours')
+              ${resetStats ? resetStats : ', total_baru = total_baru + ?, total_diperbarui = total_diperbarui + ?, total_tidak_berubah = total_tidak_berubah + ?'}
+              WHERE id = 1
+            `).bind(
+              ...(resetStats ? [bentukAktif, offset] : [bentukAktif, offset, stats.baru, stats.diperbarui, stats.tidakBerubah])
+            ).run();
+          }
         }
 
         return Response.json({ ok: true, stats });
