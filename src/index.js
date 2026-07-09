@@ -23,6 +23,12 @@ export default {
           FROM status_sinkronisasi WHERE id IN (1, 2)
         `).all();
         
+        let provStatusList = [];
+        try {
+          const { results: provRes } = await env.DB.prepare('SELECT nama_provinsi, terakhir_sukses FROM provinsi_sync_status').all();
+          provStatusList = provRes || [];
+        } catch (e) {} // Abaikan jika tabel belum ada
+        
         let row1 = results?.find(r => r.id === 1) || { bentuk_aktif: 'tk', offset_terakhir: 0 };
         let row2 = results?.find(r => r.id === 2);
         
@@ -83,6 +89,11 @@ export default {
         // Dapatkan representasi tanggal jam 00:00 di WIB untuk kalkulasi offset hari
         const today00Utc = Date.UTC(dateWIB.getUTCFullYear(), dateWIB.getUTCMonth(), dateWIB.getUTCDate());
         const today00WibAbsoluteMs = today00Utc - (7 * 60 * 60 * 1000); // Absolute timestamp 00:00 WIB hari ini
+        
+        const provSyncMap = {};
+        provStatusList.forEach(p => {
+           provSyncMap[p.nama_provinsi] = new Date(p.terakhir_sukses.replace(' ', 'T') + '+07:00').getTime();
+        });
 
         let jadwalHtml = '<div class="jadwal-container"><h2>Jadwal Sinkronisasi Mingguan (00:00 WIB)</h2><div class="jadwal-grid">';
         jadwal.forEach(j => {
@@ -114,10 +125,18 @@ export default {
             let statusText = 'Menunggu';
             let itemClass = 'prov-item waiting';
             
+            let lastSyncTime = provSyncMap[prov] || 0;
+            
             if (isPast) {
-              statusIcon = '✅';
-              statusText = 'Selesai';
-              itemClass = 'prov-item done';
+              if (lastSyncTime >= targetTime) {
+                statusIcon = '✅';
+                statusText = 'Selesai';
+                itemClass = 'prov-item done';
+              } else {
+                statusIcon = '❌';
+                statusText = 'Terlewat / Gagal';
+                itemClass = 'prov-item waiting'; // biarkan abu-abu/merah
+              }
             } else if (isToday) {
               let provIndex = j.provs.indexOf(prov);
               let activeProvIndex = j.provs.findIndex(p => activeRow.bentuk_aktif && activeRow.bentuk_aktif.includes(p));
@@ -387,6 +406,16 @@ export default {
         let resetStats = "";
         if (bentukAktif === 'tk' && offset === 0) {
           resetStats = ", total_baru = 0, total_diperbarui = 0, total_tidak_berubah = 0, total_dihapus = 0, waktu_mulai_sinkronisasi = datetime('now', '+7 hours')";
+        }
+        
+        // Simpan log terakhir provinsi sukses
+        if (body.customSync && body.namaProvinsi && body.namaProvinsi !== 'SEMUA') {
+          await env.DB.prepare(`CREATE TABLE IF NOT EXISTS provinsi_sync_status (nama_provinsi TEXT PRIMARY KEY, terakhir_sukses TIMESTAMPTZ)`).run();
+          await env.DB.prepare(`
+            INSERT INTO provinsi_sync_status (nama_provinsi, terakhir_sukses)
+            VALUES (?, datetime('now', '+7 hours'))
+            ON CONFLICT(nama_provinsi) DO UPDATE SET terakhir_sukses = excluded.terakhir_sukses
+          `).bind(body.namaProvinsi).run();
         }
 
         if (isFinished) {
