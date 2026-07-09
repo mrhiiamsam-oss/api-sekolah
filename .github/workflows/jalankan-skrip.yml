@@ -8,8 +8,8 @@ on:
         type: string
         default: ''
   schedule:
-    # Berjalan SETIAP HARI jam 16:00 UTC (23:00 WIB)
-    - cron: '0 16 * * *'
+    # Berjalan SETIAP HARI jam 19:00 UTC (02:00 WIB keesokan harinya)
+    - cron: '0 19 * * *'
 
 permissions:
   actions: write
@@ -32,7 +32,7 @@ jobs:
 
       - name: Tentukan Provinsi Berdasarkan Hari
         run: |
-          DAY_OF_WEEK=$(date +%u) # 1=Senin, 7=Minggu
+          DAY_OF_WEEK=$(TZ=Asia/Jakarta date +%u) # 1=Senin, 7=Minggu
           
           # Jika di-trigger manual dan ada input provinsi
           if [ "${{ github.event.inputs.pilihan_provinsi }}" != "" ]; then

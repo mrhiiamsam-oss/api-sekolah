@@ -61,6 +61,93 @@ export default {
           }
         }
 
+        // Data Jadwal Sinkronisasi Mingguan per Provinsi (sesuai jalankan-skrip.yml)
+        const jadwal = [
+          { hari: 'Senin', id: 1, provs: ['JAWA BARAT', 'BALI', 'BENGKULU', 'GORONTALO', 'SULAWESI BARAT'] },
+          { hari: 'Selasa', id: 2, provs: ['JAWA TIMUR', 'DI YOGYAKARTA', 'KEPULAUAN BANGKA BELITUNG', 'KALIMANTAN UTARA', 'MALUKU UTARA'] },
+          { hari: 'Rabu', id: 3, provs: ['JAWA TENGAH', 'BANTEN', 'KEPULAUAN RIAU', 'PAPUA BARAT', 'PAPUA BARAT DAYA'] },
+          { hari: 'Kamis', id: 4, provs: ['SUMATERA UTARA', 'DKI JAKARTA', 'ACEH', 'JAMBI', 'PAPUA', 'PAPUA SELATAN'] },
+          { hari: 'Jumat', id: 5, provs: ['SUMATERA SELATAN', 'LAMPUNG', 'RIAU', 'SUMATERA BARAT', 'PAPUA TENGAH', 'PAPUA PEGUNUNGAN'] },
+          { hari: 'Sabtu', id: 6, provs: ['SULAWESI SELATAN', 'SULAWESI TENGGARA', 'SULAWESI TENGAH', 'SULAWESI UTARA', 'KALIMANTAN TIMUR', 'MALUKU'] },
+          { hari: 'Minggu', id: 0, provs: ['KALIMANTAN BARAT', 'KALIMANTAN SELATAN', 'KALIMANTAN TENGAH', 'NUSA TENGGARA TIMUR', 'NUSA TENGGARA BARAT'] }
+        ];
+
+        // Kalkulasi waktu menggunakan UTC yang ditambahkan offset WIB (+7 jam)
+        const nowUtcMs = new Date().getTime();
+        const wibMs = nowUtcMs + (7 * 60 * 60 * 1000);
+        const dateWIB = new Date(wibMs);
+        
+        const todayId = dateWIB.getUTCDay(); // 0 = Minggu, 1 = Senin
+        const currentDayIndex = todayId === 0 ? 7 : todayId;
+        
+        // Dapatkan representasi tanggal jam 00:00 di WIB untuk kalkulasi offset hari
+        const today00WIB = new Date(Date.UTC(dateWIB.getUTCFullYear(), dateWIB.getUTCMonth(), dateWIB.getUTCDate()));
+
+        let jadwalHtml = '<div class="jadwal-container"><h2>Jadwal Sinkronisasi Mingguan (02:00 WIB)</h2><div class="jadwal-grid">';
+        jadwal.forEach(j => {
+          const jIndex = j.id === 0 ? 7 : j.id;
+          
+          let diff = jIndex - currentDayIndex;
+          if (diff < -1) diff += 7; // Jika sudah lewat >1 hari, maka jadikan minggu depan
+          if (diff === 6) diff = -1; // +6 hari dari hari ini sama dengan kemarin
+          
+          const isToday = diff === 0;
+          const isPast = diff === -1;
+          
+          // Hitung tanggal target
+          const targetTime = today00WIB.getTime() + (diff * 24 * 60 * 60 * 1000);
+          const targetDate = new Date(targetTime);
+          
+          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+          const d = targetDate.getUTCDate();
+          const m = monthNames[targetDate.getUTCMonth()];
+          const y = targetDate.getUTCFullYear();
+          const dateStr = `${d} ${m} ${y}`;
+          const displayHari = `${j.hari}, ${dateStr}`;
+          
+          let dayClass = isToday ? 'day-card today' : 'day-card';
+          let dayHeaderClass = isToday ? 'day-header today' : 'day-header';
+          
+          let provListHtml = j.provs.map(prov => {
+            let statusIcon = '🕒';
+            let statusText = 'Menunggu';
+            let itemClass = 'prov-item waiting';
+            
+            if (isPast) {
+              statusIcon = '✅';
+              statusText = 'Selesai';
+              itemClass = 'prov-item done';
+            } else if (isToday) {
+              // Jika ini adalah Custom Sync dan nama provinsinya sedang diproses
+              if (isRunning && activeRow.bentuk_aktif && activeRow.bentuk_aktif.includes(prov)) {
+                statusIcon = '<span class="spin-icon">🔄</span>';
+                statusText = 'Proses';
+                itemClass = 'prov-item processing';
+              } else if (selesai && activeRow.bentuk_aktif && activeRow.bentuk_aktif.includes(prov)) {
+                // Jika sudah selesai baru saja
+                statusIcon = '✅';
+                statusText = 'Selesai';
+                itemClass = 'prov-item done';
+              }
+            }
+            
+            return `<div class="${itemClass}">
+              <span class="prov-name">${prov}</span>
+              <span class="prov-status" title="${statusText}">${statusIcon}</span>
+            </div>`;
+          }).join('');
+
+          jadwalHtml += `
+            <div class="${dayClass}">
+              <div class="${dayHeaderClass}">${displayHari} ${isToday ? ' (Hari Ini)' : ''}</div>
+              <div class="prov-list">
+                ${provListHtml}
+              </div>
+            </div>
+          `;
+        });
+        jadwalHtml += '</div></div>';
+
         const html = `<!DOCTYPE html>
 <html lang="id">
 <head>
@@ -85,7 +172,7 @@ export default {
     .card {
       background: var(--card); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
       border: 1px solid var(--border); border-radius: 24px;
-      padding: 32px 24px; width: 100%; max-width: 450px;
+      padding: 32px 24px; width: 100%; max-width: 650px;
       box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5); text-align: center; margin: auto;
     }
     h1 {
@@ -102,6 +189,9 @@ export default {
     .status-badge.stopped { background: rgba(248, 113, 113, 0.15); color: var(--danger); }
     
     .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 24px; }
+    @media (min-width: 600px) {
+      .grid { grid-template-columns: repeat(4, 1fr); }
+    }
     .stat-box { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
     .stat-val { font-size: 20px; font-weight: 700; color: #fff; }
     .stat-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
@@ -126,6 +216,28 @@ export default {
       transform: translateY(-2px);
       box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
     }
+
+    /* Styles untuk Jadwal */
+    .jadwal-container { margin-top: 32px; text-align: left; }
+    .jadwal-container h2 { font-size: 18px; margin-bottom: 16px; color: #fff; font-weight: 600; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    .jadwal-grid { display: grid; grid-template-columns: 1fr; gap: 12px; max-height: 380px; overflow-y: auto; padding-right: 6px; }
+    @media (min-width: 600px) {
+      .jadwal-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .jadwal-grid::-webkit-scrollbar { width: 6px; }
+    .jadwal-grid::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 4px; }
+    .jadwal-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .day-card { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 16px; padding: 16px; transition: transform 0.2s; }
+    .day-card.today { border-color: var(--primary); background: rgba(99, 102, 241, 0.08); box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1); }
+    .day-header { font-weight: 700; font-size: 15px; margin-bottom: 12px; color: var(--text-muted); }
+    .day-header.today { color: var(--primary-light); }
+    .prov-list { display: flex; flex-direction: column; gap: 8px; }
+    .prov-item { display: flex; justify-content: space-between; align-items: center; font-size: 13px; background: rgba(0,0,0,0.25); padding: 8px 12px; border-radius: 8px; transition: background 0.2s; }
+    .prov-item.done { background: rgba(34, 197, 94, 0.1); }
+    .prov-item.processing { background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.3); }
+    .prov-name { color: #e5e7eb; font-weight: 500; }
+    .prov-item.done .prov-name { color: var(--text-muted); }
+    .spin-icon { display: inline-block; animation: rotation 2s linear infinite; }
     
     @media (max-width: 480px) {
       .card { padding: 24px 16px; border-radius: 16px; }
@@ -173,6 +285,8 @@ export default {
     <div class="progress-bar">
       <div class="progress-fill"></div>
     </div>
+    
+    ${jadwalHtml}
     
     <a href="https://api-sekolah-kita.pages.dev/" class="btn" target="_blank" rel="noopener noreferrer">
       Kunjungi Website Utama
