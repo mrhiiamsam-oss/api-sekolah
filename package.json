@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "worker:dev": "wrangler dev",
-    "worker:deploy": "wrangler deploy"
+    "worker:dev": "wrangler dev -c wrangler.local.toml",
+    "worker:deploy": "wrangler deploy -c wrangler.local.toml"
   },
   "keywords": [],
   "author": "",

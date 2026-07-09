@@ -1,7 +1,7 @@
 require('dotenv').config();
 const fs = require('fs');
 
-const WORKER_URL = process.env.CLOUDFLARE_WORKER_URL || 'https://fetch-data-belajar-sync.dunia-sekolah.workers.dev';
+const WORKER_URL = process.env.CLOUDFLARE_WORKER_URL || 'https://YOUR_WORKER_URL_HERE.workers.dev';
 const CRON_SECRET = process.env.CRON_SECRET;
 
 if (!CRON_SECRET) {
