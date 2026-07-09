@@ -69,10 +69,15 @@ async function fetchCustomData() {
   } else {
     const parts = argProvinsi.split(',').map(p => p.trim()).filter(p => p);
     for (const p of parts) {
-      const foundCode = Object.keys(PROVINCES).find(k => PROVINCES[k] === p || k === p || PROVINCES[k].includes(p));
+      const searchP = p.replace(/[^A-Z0-9]/g, '');
+      const foundCode = Object.keys(PROVINCES).find(k => {
+        const cleanK = k.replace(/[^A-Z0-9]/g, '');
+        const cleanV = PROVINCES[k].replace(/[^A-Z0-9]/g, '');
+        return cleanK === searchP || cleanV === searchP || cleanV.includes(searchP);
+      });
       if (foundCode) {
         kodeWilayahList.push(foundCode);
-        console.log(`Provinsi dikenali: ${PROVINCES[foundCode]} (Kode: ${foundCode})`);
+        console.log(`Provinsi dikenali: ${PROVINCES[foundCode]} (Kode: ${foundCode}) dari input '${p}'`);
       } else {
         console.log(`Peringatan: Provinsi '${p}' tidak dikenali, akan diabaikan.`);
       }
