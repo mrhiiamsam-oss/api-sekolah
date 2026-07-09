@@ -85,11 +85,13 @@ async function fetchCustomData() {
     }
   }
 
+  let isFirstBatch = false;
   if (!waktuMulai) {
     // Buat waktu mulai baru dalam format UTC+7 YYYY-MM-DD HH:MM:SS
     const d = new Date(new Date().getTime() + 7 * 3600 * 1000);
     waktuMulai = d.toISOString().replace('T', ' ').substring(0, 19);
     console.log(`Waktu mulai sync baru: ${waktuMulai}`);
+    isFirstBatch = true;
   } else {
     console.log(`Menggunakan waktu mulai dari iterasi sebelumnya: ${waktuMulai}`);
   }
@@ -125,7 +127,17 @@ async function fetchCustomData() {
 
       offset += limit;
       
-      const { stats } = await postBatchToWorker(dataList, bentukAktif, offset, false);
+      const provNameDB = kodeWilayah === "360" ? "SEMUA" : PROVINCES[kodeWilayah];
+      const customParams = {
+        bentukList,
+        namaProvinsi: provNameDB,
+        waktuMulai,
+        isStart: isFirstBatch
+      };
+      
+      const { stats } = await postBatchToWorker(dataList, bentukAktif, offset, false, customParams);
+      isFirstBatch = false;
+      
       console.log(`Offset ${offset - limit} [${bentukAktif}]: ${dataList.length} ditarik — ${stats.tidakBerubah} tetap, ${stats.baru} baru, ${stats.diperbarui} update.`);
 
       const jedaMs = stats.baru === 0 && stats.diperbarui === 0 ? 200 : 1000;

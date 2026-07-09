@@ -11,6 +11,7 @@ export default {
         // Ambil status dari D1
         const { results } = await env.DB.prepare(`
           SELECT 
+            id,
             bentuk_aktif, 
             offset_terakhir, 
             waktu_selesai_terakhir, 
@@ -19,24 +20,39 @@ export default {
             total_diperbarui,
             total_tidak_berubah,
             total_dihapus
-          FROM status_sinkronisasi WHERE id = 1
+          FROM status_sinkronisasi WHERE id IN (1, 2)
         `).all();
         
-        let row = results?.[0] || { bentuk_aktif: 'tk', offset_terakhir: 0 };
+        let row1 = results?.find(r => r.id === 1) || { bentuk_aktif: 'tk', offset_terakhir: 0 };
+        let row2 = results?.find(r => r.id === 2);
         
-        const bentukBerikutnya = row.bentuk_aktif;
-        const offsetBerikutnya = row.offset_terakhir;
+        let activeRow = row1;
+        let isCustom = false;
+        
+        if (row2 && row2.updated_at && row1.updated_at) {
+          const t1 = new Date(row1.updated_at.replace(' ', 'T') + '+07:00').getTime();
+          const t2 = new Date(row2.updated_at.replace(' ', 'T') + '+07:00').getTime();
+          if (t2 > t1) {
+            activeRow = row2;
+            isCustom = true;
+          }
+        } else if (row2 && !row1.updated_at) {
+          activeRow = row2;
+          isCustom = true;
+        }
+        
+        const bentukBerikutnya = activeRow.bentuk_aktif || 'tk';
+        const offsetBerikutnya = activeRow.offset_terakhir || 0;
         
         const currentIndex = VALID_BENTUK.indexOf(bentukBerikutnya);
-        const progressPercent = Math.max(0, Math.round((currentIndex / VALID_BENTUK.length) * 100));
+        const progressPercent = isCustom ? 100 : Math.max(0, Math.round((currentIndex / VALID_BENTUK.length) * 100));
         
-        const selesai = bentukBerikutnya === 'tk' && offsetBerikutnya === 0 && row.waktu_selesai_terakhir !== null && progressPercent === 0;
+        const selesai = isCustom ? (bentukBerikutnya === 'Selesai') : (bentukBerikutnya === 'tk' && offsetBerikutnya === 0 && activeRow.waktu_selesai_terakhir !== null && progressPercent === 0);
 
-        // Cek apakah aksi cron sedang berjalan (jika update terakhir dalam 30 detik terakhir)
         let isRunning = false;
-        if (row.updated_at && !selesai) {
+        if (activeRow.updated_at && !selesai) {
           // Ganti spasi dengan T agar formatnya valid ISO 8601, tambahkan +07:00 karena waktu sekarang WIB
-          const safeDateStr = row.updated_at.replace(' ', 'T') + '+07:00';
+          const safeDateStr = activeRow.updated_at.replace(' ', 'T') + '+07:00';
           const lastUpdated = new Date(safeDateStr);
           const now = new Date();
           const diffMs = now - lastUpdated;
@@ -128,28 +144,28 @@ export default {
       ${selesai ? 'Sinkronisasi Selesai' : (isRunning ? 'Sedang Menyinkronkan...' : 'Menunggu / Terhenti')}
     </div>
     
-    <h1>Sekolah Sync Dashboard</h1>
+    <h1>Sekolah Sync Dashboard ${isCustom ? '<span style="color: #f59e0b; font-size: 14px; vertical-align: middle; background: rgba(245, 158, 11, 0.15); padding: 4px 10px; border-radius: 20px;">Custom</span>' : '<span style="color: var(--primary-light); font-size: 14px; vertical-align: middle; background: rgba(99, 102, 241, 0.15); padding: 4px 10px; border-radius: 20px;">Full</span>'}</h1>
     <div style="font-size: 15px; color: #d1d5db; line-height: 1.5;">
       Bentuk Aktif: <strong style="color: var(--primary-light); text-transform: uppercase;">${bentukBerikutnya}</strong><br>
       Offset Saat Ini: <strong>${offsetBerikutnya}</strong><br>
-      Update Terakhir: <strong style="color: #fff;">${row.updated_at || '-'} WIB</strong>
+      Update Terakhir: <strong style="color: #fff;">${activeRow.updated_at || '-'} WIB</strong>
     </div>
 
     <div class="grid">
       <div class="stat-box">
-        <div class="stat-val" style="color: var(--success);">${row.total_baru || 0}</div>
+        <div class="stat-val" style="color: var(--success);">${activeRow.total_baru || 0}</div>
         <div class="stat-label">Baru Ditambahkan</div>
       </div>
       <div class="stat-box">
-        <div class="stat-val" style="color: var(--info);">${row.total_diperbarui || 0}</div>
+        <div class="stat-val" style="color: var(--info);">${activeRow.total_diperbarui || 0}</div>
         <div class="stat-label">Diperbarui</div>
       </div>
       <div class="stat-box">
-        <div class="stat-val" style="color: var(--danger);">${row.total_dihapus || 0}</div>
+        <div class="stat-val" style="color: var(--danger);">${activeRow.total_dihapus || 0}</div>
         <div class="stat-label">Dihapus (Nonaktif)</div>
       </div>
       <div class="stat-box">
-        <div class="stat-val">${row.total_tidak_berubah || 0}</div>
+        <div class="stat-val">${activeRow.total_tidak_berubah || 0}</div>
         <div class="stat-label">Tidak Berubah</div>
       </div>
     </div>
@@ -211,8 +227,12 @@ export default {
 
             const delRes = await env.DB.prepare(query).bind(...params).run();
             stats.dihapus = delRes.meta.changes;
-            // Untuk customSync, kita TIDAK mengupdate tabel status_sinkronisasi
-            // agar angka di dashboard web (yang ditujukan untuk Full Sync) tidak terpengaruh.
+            // Update status_sinkronisasi untuk id = 2 (Custom Sync)
+            await env.DB.prepare(`
+              UPDATE status_sinkronisasi 
+              SET total_dihapus = total_dihapus + ?, bentuk_aktif = 'Selesai', waktu_selesai_terakhir = datetime('now', '+7 hours'), updated_at = datetime('now', '+7 hours')
+              WHERE id = 2
+            `).bind(stats.dihapus).run();
           } else {
             await env.DB.prepare(`
               UPDATE status_sinkronisasi 
@@ -250,6 +270,24 @@ export default {
               WHERE id = 1
             `).bind(
               ...(resetStats ? [bentukAktif, offset] : [bentukAktif, offset, stats.baru, stats.diperbarui, stats.tidakBerubah])
+            ).run();
+          } else {
+            const displayBentuk = body.namaProvinsi && body.namaProvinsi !== 'SEMUA' ? `${bentukAktif.toUpperCase()} (${body.namaProvinsi})` : bentukAktif.toUpperCase();
+            let resetQuery = '';
+            if (body.isStart) {
+              resetQuery = ', total_baru = 0, total_diperbarui = 0, total_tidak_berubah = 0, total_dihapus = 0';
+            }
+            // Upsert for id = 2
+            await env.DB.prepare(`
+              INSERT INTO status_sinkronisasi (id, bentuk_aktif, offset_terakhir, total_baru, total_diperbarui, total_tidak_berubah, updated_at) 
+              VALUES (2, ?, ?, ?, ?, ?, datetime('now', '+7 hours'))
+              ON CONFLICT(id) DO UPDATE SET
+                bentuk_aktif = excluded.bentuk_aktif,
+                offset_terakhir = excluded.offset_terakhir,
+                updated_at = excluded.updated_at
+                ${resetQuery ? resetQuery : `, total_baru = status_sinkronisasi.total_baru + excluded.total_baru, total_diperbarui = status_sinkronisasi.total_diperbarui + excluded.total_diperbarui, total_tidak_berubah = status_sinkronisasi.total_tidak_berubah + excluded.total_tidak_berubah`}
+            `).bind(
+              displayBentuk, offset, stats.baru, stats.diperbarui, stats.tidakBerubah
             ).run();
           }
         }
