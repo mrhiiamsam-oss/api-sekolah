@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS status_sinkronisasi (
   total_baru INTEGER NOT NULL DEFAULT 0,
   total_diperbarui INTEGER NOT NULL DEFAULT 0,
   total_tidak_berubah INTEGER NOT NULL DEFAULT 0,
-  total_dihapus INTEGER NOT NULL DEFAULT 0
+  total_dihapus INTEGER NOT NULL DEFAULT 0,
+  total_estimasi INTEGER NOT NULL DEFAULT 0
 );
 
 -- id 1: Full Sync

@@ -19,7 +19,8 @@ export default {
             total_baru,
             total_diperbarui,
             total_tidak_berubah,
-            total_dihapus
+            total_dihapus,
+            total_estimasi
           FROM status_sinkronisasi WHERE id IN (1, 2)
         `).all();
         
@@ -50,7 +51,7 @@ export default {
         const bentukBerikutnya = activeRow.bentuk_aktif || 'tk';
         const offsetBerikutnya = activeRow.offset_terakhir || 0;
         
-        const totalEstimasi = activeRow.total_estimasi || 12654;
+        const totalEstimasi = activeRow.total_estimasi || (isCustom ? 12654 : 553456);
         const totalSynced = (activeRow.total_baru || 0) + (activeRow.total_diperbarui || 0) + (activeRow.total_tidak_berubah || 0);
         
         const currentIndex = VALID_BENTUK.indexOf(bentukBerikutnya);
@@ -379,7 +380,7 @@ export default {
       </div>
       <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--text-muted); margin-top: 8px; font-weight: 500;">
         <span>${progressPercent}% Selesai</span>
-        <span>Data: ${totalSynced} / ${isCustom ? totalEstimasi : '12654'}</span>
+        <span>Data: ${totalSynced} / ${totalEstimasi}</span>
       </div>
     </div>
     
