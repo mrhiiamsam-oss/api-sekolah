@@ -481,8 +481,9 @@ export default {
             let params = [...body.bentukList, body.waktuMulai];
 
             if (body.namaProvinsi && body.namaProvinsi !== 'SEMUA') {
-               query = `DELETE FROM sekolah WHERE LOWER(bentuk_pendidikan) IN (${placeholders}) AND nama_provinsi LIKE ? AND migrated_at < ?`;
-               params = [...body.bentukList, `%${body.namaProvinsi}%`, body.waktuMulai];
+               const searchProv = body.namaProvinsi === 'LUAR NEGERI' ? 'LUAR NEGERI' : `PROV. ${body.namaProvinsi}`;
+               query = `DELETE FROM sekolah WHERE LOWER(bentuk_pendidikan) IN (${placeholders}) AND nama_provinsi = ? AND migrated_at < ?`;
+               params = [...body.bentukList, searchProv, body.waktuMulai];
             }
 
             const delRes = await env.DB.prepare(query).bind(...params).run();
