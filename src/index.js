@@ -276,7 +276,7 @@ export default {
             const displayBentuk = body.namaProvinsi && body.namaProvinsi !== 'SEMUA' ? `${bentukAktif.toUpperCase()} (${body.namaProvinsi})` : bentukAktif.toUpperCase();
             let resetQuery = '';
             if (body.isStart) {
-              resetQuery = ', total_baru = 0, total_diperbarui = 0, total_tidak_berubah = 0, total_dihapus = 0';
+              resetQuery = ', total_baru = excluded.total_baru, total_diperbarui = excluded.total_diperbarui, total_tidak_berubah = excluded.total_tidak_berubah, total_dihapus = 0';
             }
             // Upsert for id = 2
             await env.DB.prepare(`

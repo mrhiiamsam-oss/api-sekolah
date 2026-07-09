@@ -41,6 +41,7 @@ async function postBatchToWorker(dataList, bentukAktif, offset, isFinished, cust
     payload.bentukList = customSyncParams.bentukList;
     payload.namaProvinsi = customSyncParams.namaProvinsi;
     payload.waktuMulai = customSyncParams.waktuMulai;
+    payload.isStart = customSyncParams.isStart;
   }
   const res = await fetch(`${WORKER_URL}/sync-batch`, {
     method: 'POST',
