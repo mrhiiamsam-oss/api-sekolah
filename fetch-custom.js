@@ -22,19 +22,37 @@ const BENTUK_GROUP = {
   "Dikmas": ['pkbm', 'skb', 'kursus', 'pondok-pesantren']
 };
 
-const PROVINCES = {
-  "010000": "DKI JAKARTA", "020000": "JAWA BARAT", "030000": "JAWA TENGAH", "040000": "DI YOGYAKARTA",
-  "050000": "JAWA TIMUR", "060000": "ACEH", "070000": "SUMATERA UTARA", "080000": "SUMATERA BARAT",
-  "090000": "RIAU", "100000": "JAMBI", "110000": "SUMATERA SELATAN", "120000": "LAMPUNG",
-  "130000": "KALIMANTAN BARAT", "140000": "KALIMANTAN TENGAH", "150000": "KALIMANTAN SELATAN",
-  "160000": "KALIMANTAN TIMUR", "170000": "SULAWESI UTARA", "180000": "SULAWESI TENGAH",
-  "190000": "SULAWESI SELATAN", "200000": "SULAWESI TENGGARA", "210000": "MALUKU", "220000": "BALI",
-  "230000": "NUSA TENGGARA BARAT", "240000": "NUSA TENGGARA TIMUR", "250000": "PAPUA", "260000": "BENGKULU",
-  "270000": "MALUKU UTARA", "280000": "BANTEN", "290000": "KEPULAUAN BANGKA BELITUNG", "300000": "GORONTALO",
-  "310000": "KEPULAUAN RIAU", "320000": "PAPUA BARAT", "330000": "SULAWESI BARAT", "340000": "KALIMANTAN UTARA",
-  "350000": "LUAR NEGERI", "360000": "PAPUA TENGAH", "370000": "PAPUA SELATAN", "380000": "PAPUA PEGUNUNGAN", 
-  "390000": "PAPUA BARAT DAYA"
-};
+let PROVINCES = {};
+
+async function loadProvinces() {
+  try {
+    console.log("Mengambil referensi kode wilayah provinsi dari API Belajar.id...");
+    const res = await fetch('https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/jumlah-data-induk/360?limit=100&offset=0');
+    const result = await res.json();
+    if (result && result.data) {
+      result.data.forEach(p => {
+        PROVINCES[p.kodeWilayah] = p.namaWilayah;
+      });
+      PROVINCES["350000"] = "LUAR NEGERI"; // Pastikan Luar Negeri terdaftar
+    }
+  } catch (e) {
+    console.error("Gagal mengambil referensi provinsi, menggunakan mode fallback", e);
+    // Fallback darurat
+    PROVINCES = {
+      "010000": "DKI JAKARTA", "020000": "JAWA BARAT", "030000": "JAWA TENGAH", "040000": "DI YOGYAKARTA",
+      "050000": "JAWA TIMUR", "060000": "ACEH", "070000": "SUMATERA UTARA", "080000": "SUMATERA BARAT",
+      "090000": "RIAU", "100000": "JAMBI", "110000": "SUMATERA SELATAN", "120000": "LAMPUNG",
+      "130000": "KALIMANTAN BARAT", "140000": "KALIMANTAN TENGAH", "150000": "KALIMANTAN SELATAN",
+      "160000": "KALIMANTAN TIMUR", "170000": "SULAWESI UTARA", "180000": "SULAWESI TENGAH",
+      "190000": "SULAWESI SELATAN", "200000": "SULAWESI TENGGARA", "210000": "MALUKU", "220000": "BALI",
+      "230000": "NUSA TENGGARA BARAT", "240000": "NUSA TENGGARA TIMUR", "250000": "PAPUA", "260000": "BENGKULU",
+      "270000": "MALUKU UTARA", "280000": "BANTEN", "290000": "KEPULAUAN BANGKA BELITUNG", "300000": "GORONTALO",
+      "310000": "KEPULAUAN RIAU", "320000": "PAPUA BARAT", "330000": "SULAWESI BARAT", "340000": "KALIMANTAN UTARA",
+      "350000": "LUAR NEGERI", "360000": "PAPUA TENGAH", "370000": "PAPUA SELATAN", "380000": "PAPUA PEGUNUNGAN", 
+      "390000": "PAPUA BARAT DAYA"
+    };
+  }
+}
 
 async function postBatchToWorker(dataList, bentukAktif, offset, isFinished, customSyncParams = null) {
   const payload = { dataList, bentukAktif, offset, isFinished, customSync: true };
@@ -54,6 +72,8 @@ async function postBatchToWorker(dataList, bentukAktif, offset, isFinished, cust
 }
 
 async function fetchCustomData() {
+  await loadProvinces();
+  
   const argBentuk = process.env.PILIHAN_BENTUK || "Semua";
   const argProvinsi = (process.env.PILIHAN_PROVINSI || "Semua").trim().toUpperCase();
   const mulaiDariAwal = process.env.MULAI_DARI_AWAL === 'true';
