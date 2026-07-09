@@ -62,26 +62,44 @@ async function fetchCustomData() {
 
   const bentukList = BENTUK_GROUP[argBentuk] || BENTUK_GROUP["Semua"];
   
-  let kodeWilayah = "360";
-  if (argProvinsi !== "SEMUA" && argProvinsi !== "") {
-    const foundCode = Object.keys(PROVINCES).find(k => PROVINCES[k] === argProvinsi || k === argProvinsi || PROVINCES[k].includes(argProvinsi));
-    if (foundCode) {
-      kodeWilayah = foundCode;
-      console.log(`Provinsi dikenali: ${PROVINCES[foundCode]} (Kode: ${kodeWilayah})`);
-    } else {
-      console.log(`Peringatan: Provinsi '${argProvinsi}' tidak dikenali. Menggunakan data seluruh Indonesia (360).`);
+  let kodeWilayahList = [];
+  if (argProvinsi === "SEMUA" || argProvinsi === "") {
+    kodeWilayahList.push("360");
+  } else {
+    const parts = argProvinsi.split(',').map(p => p.trim()).filter(p => p);
+    for (const p of parts) {
+      const foundCode = Object.keys(PROVINCES).find(k => PROVINCES[k] === p || k === p || PROVINCES[k].includes(p));
+      if (foundCode) {
+        kodeWilayahList.push(foundCode);
+        console.log(`Provinsi dikenali: ${PROVINCES[foundCode]} (Kode: ${foundCode})`);
+      } else {
+        console.log(`Peringatan: Provinsi '${p}' tidak dikenali, akan diabaikan.`);
+      }
+    }
+    if (kodeWilayahList.length === 0) {
+      console.log(`Tidak ada provinsi valid yang dimasukkan. Menggunakan data seluruh Indonesia (360).`);
+      kodeWilayahList.push("360");
     }
   }
 
-  let bentukIndex = 0;
+  // Buat daftar antrean task: kombinasi tiap provinsi dan tiap bentuk sekolah
+  const tasks = [];
+  for (const prov of kodeWilayahList) {
+    for (const bentuk of bentukList) {
+      tasks.push({ prov, bentuk });
+    }
+  }
+
+  let taskIndex = 0;
   let offset = 0;
   let waktuMulai = process.env.WAKTU_MULAI || "";
 
   if (!mulaiDariAwal) {
-    bentukIndex = parseInt(process.env.LANJUTAN_INDEX || '0', 10);
+    taskIndex = parseInt(process.env.LANJUTAN_INDEX || '0', 10);
     offset = parseInt(process.env.LANJUTAN_OFFSET || '0', 10);
-    if (bentukIndex > 0 || offset > 0) {
-      console.log(`Melanjutkan dari iterasi sebelumnya: Index Bentuk ${bentukIndex} (${bentukList[bentukIndex]}), Offset ${offset}`);
+    if (taskIndex > 0 || offset > 0) {
+      const t = tasks[Math.min(taskIndex, tasks.length - 1)];
+      console.log(`Melanjutkan dari iterasi sebelumnya: Provinsi ${PROVINCES[t.prov] || 'SEMUA'}, Bentuk ${t.bentuk}, Offset ${offset}`);
     }
   }
 
@@ -97,19 +115,19 @@ async function fetchCustomData() {
   }
 
   const limit = 20;
-  let hasMoreData = true;
   const startTime = Date.now();
   const LAMA_MAKSIMAL = 5 * 60 * 60 * 1000;
 
-  while (hasMoreData && bentukIndex < bentukList.length) {
+  while (taskIndex < tasks.length) {
     if (Date.now() - startTime > LAMA_MAKSIMAL) {
       console.log("⚠️ Mendekati 5 jam! Berhenti untuk menghindari timeout GitHub.");
-      // Simpan state agar bisa dibaca oleh shell script GH Actions
-      fs.writeFileSync('lanjutkan_custom.json', JSON.stringify({ bentukIndex, offset, waktuMulai }));
+      fs.writeFileSync('lanjutkan_custom.json', JSON.stringify({ bentukIndex: taskIndex, offset, waktuMulai }));
       break;
     }
 
-    const bentukAktif = bentukList[bentukIndex];
+    const currentTask = tasks[taskIndex];
+    const kodeWilayah = currentTask.prov;
+    const bentukAktif = currentTask.bentuk;
     const url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=${limit}&offset=${offset}&bentukPendidikan=${bentukAktif}`;
 
     try {
@@ -119,9 +137,9 @@ async function fetchCustomData() {
       const dataList = result.data || [];
 
       if (dataList.length === 0) {
-        bentukIndex++;
         offset = 0;
-        console.log(`➡️ Selesai untuk tipe sekolah [${bentukAktif.toUpperCase()}]. Pindah ke bentuk berikutnya.`);
+        taskIndex++;
+        console.log(`➡️ Selesai untuk tipe sekolah [${bentukAktif.toUpperCase()}] wilayah ${kodeWilayah}. Pindah ke antrean berikutnya.`);
         continue;
       }
 
@@ -143,25 +161,27 @@ async function fetchCustomData() {
       const jedaMs = stats.baru === 0 && stats.diperbarui === 0 ? 200 : 1000;
       await new Promise((resolve) => setTimeout(resolve, jedaMs));
 
-    } catch (error) {
-      console.error("Terjadi kesalahan:", error);
-      await new Promise(resolve => setTimeout(resolve, 5000));
+    } catch (err) {
+      console.error(`Gagal mengambil data dari API untuk bentuk ${bentukAktif}:`, err);
+      await new Promise(r => setTimeout(r, 5000));
     }
   }
   
-  if (bentukIndex >= bentukList.length) {
+  if (taskIndex >= tasks.length) {
     console.log("✨ Melakukan pembersihan data yang tidak lagi ada di sumber...");
-    const provNameDB = kodeWilayah === "360" ? "SEMUA" : PROVINCES[kodeWilayah];
     
-    try {
-      const { stats } = await postBatchToWorker([], 'tk', 0, true, {
-        bentukList,
-        namaProvinsi: provNameDB,
-        waktuMulai: waktuMulai
-      });
-      console.log(`🧹 Berhasil membersihkan data lama. ${stats.dihapus || 0} sekolah dihapus.`);
-    } catch (e) {
-      console.error("Gagal membersihkan data lama:", e);
+    for (const provCode of kodeWilayahList) {
+      const provNameDB = provCode === "360" ? "SEMUA" : PROVINCES[provCode];
+      try {
+        const { stats } = await postBatchToWorker([], 'tk', 0, true, {
+          bentukList,
+          namaProvinsi: provNameDB,
+          waktuMulai: waktuMulai
+        });
+        console.log(`🧹 Berhasil membersihkan data lama untuk ${provNameDB}. ${stats.dihapus || 0} sekolah dihapus.`);
+      } catch (e) {
+        console.error(`Gagal membersihkan data lama untuk ${provNameDB}:`, e);
+      }
     }
     
     console.log("🎉 SINKRONISASI KHUSUS SELESAI!");
