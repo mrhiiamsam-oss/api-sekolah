@@ -1,0 +1,86 @@
+name: Trigger Custom Sync (Berdasarkan Pilihan)
+
+on:
+  workflow_dispatch:
+    inputs:
+      pilihan_bentuk:
+        description: 'Pilih Bentuk Sekolah yang akan diupdate'
+        required: true
+        type: choice
+        default: 'Semua'
+        options:
+          - Semua
+          - TK Sederajat
+          - KB Sederajat
+          - TPA & SPS
+          - SD Sederajat
+          - SMP Sederajat
+          - SMA Sederajat
+          - SMK Sederajat
+          - SLB
+          - Dikmas
+      pilihan_provinsi:
+        description: 'Nama Provinsi (misal: Jawa Barat, DKI Jakarta, atau ketik "Semua" untuk seluruh Indonesia)'
+        required: true
+        type: string
+        default: 'Semua'
+      mulai_dari_awal:
+        description: 'Mulai dari awal (centang jika ingin scan ulang, hilangkan jika lanjut dari yang sebelumnya terhenti)'
+        type: boolean
+        default: true
+      lanjutan_index:
+        description: '(Internal) Lanjutan index bentuk'
+        type: string
+        default: '0'
+      lanjutan_offset:
+        description: '(Internal) Lanjutan offset'
+        type: string
+        default: '0'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  run-custom-script:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ambil kode dari repository
+        uses: actions/checkout@v3
+
+      - name: Siapkan Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install module
+        run: npm install
+
+      - name: Jalankan Skrip Custom
+        env:
+          CLOUDFLARE_WORKER_URL: ${{ secrets.CLOUDFLARE_WORKER_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PILIHAN_BENTUK: ${{ github.event.inputs.pilihan_bentuk }}
+          PILIHAN_PROVINSI: ${{ github.event.inputs.pilihan_provinsi }}
+          MULAI_DARI_AWAL: ${{ github.event.inputs.mulai_dari_awal }}
+          LANJUTAN_INDEX: ${{ github.event.inputs.lanjutan_index }}
+          LANJUTAN_OFFSET: ${{ github.event.inputs.lanjutan_offset }}
+        run: node fetch-custom.js
+
+      - name: Jalankan Ulang Otomatis Jika Belum Selesai
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f lanjutkan_custom.json ]; then
+            echo "Deteksi data custom belum selesai. Memicu workflow baru untuk melanjutkan..."
+            NEXT_INDEX=$(jq -r '.bentukIndex' lanjutkan_custom.json)
+            NEXT_OFFSET=$(jq -r '.offset' lanjutkan_custom.json)
+            gh workflow run jalankan-skrip-custom.yml \
+              -f pilihan_bentuk="${{ github.event.inputs.pilihan_bentuk }}" \
+              -f pilihan_provinsi="${{ github.event.inputs.pilihan_provinsi }}" \
+              -f mulai_dari_awal=false \
+              -f lanjutan_index="${NEXT_INDEX}" \
+              -f lanjutan_offset="${NEXT_OFFSET}"
+          else
+            echo "Selesai! Tidak ada data tersisa untuk ditarik."
+          fi
