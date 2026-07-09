@@ -215,13 +215,14 @@ export default {
 
         if (isFinished) {
           if (body.customSync) {
-            // Cleanup khusus untuk Custom Sync
+            // Gunakan LOWER(bentuk_pendidikan) karena database mungkin menyimpannya sebagai huruf besar (misal 'TK', 'SD'),
+            // sedangkan body.bentukList berisi huruf kecil (misal 'tk', 'sd').
             const placeholders = body.bentukList.map(() => '?').join(',');
-            let query = `DELETE FROM sekolah WHERE bentuk_pendidikan IN (${placeholders}) AND migrated_at < ?`;
+            let query = `DELETE FROM sekolah WHERE LOWER(bentuk_pendidikan) IN (${placeholders}) AND migrated_at < ?`;
             let params = [...body.bentukList, body.waktuMulai];
 
             if (body.namaProvinsi && body.namaProvinsi !== 'SEMUA') {
-               query = `DELETE FROM sekolah WHERE bentuk_pendidikan IN (${placeholders}) AND nama_provinsi LIKE ? AND migrated_at < ?`;
+               query = `DELETE FROM sekolah WHERE LOWER(bentuk_pendidikan) IN (${placeholders}) AND nama_provinsi LIKE ? AND migrated_at < ?`;
                params = [...body.bentukList, `%${body.namaProvinsi}%`, body.waktuMulai];
             }
 
