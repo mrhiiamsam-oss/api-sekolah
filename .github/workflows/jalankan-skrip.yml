@@ -8,8 +8,8 @@ on:
         type: string
         default: ''
   schedule:
-    # Berjalan SETIAP HARI jam 17:00 UTC (00:00 WIB keesokan harinya)
-    - cron: '0 17 * * *'
+    # Berjalan SETIAP HARI jam 17:13 UTC (00:13 WIB keesokan harinya) untuk menghindari delay antrean server
+    - cron: '13 17 * * *'
 
 permissions:
   actions: write
