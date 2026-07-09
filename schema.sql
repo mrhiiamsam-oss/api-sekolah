@@ -26,9 +26,19 @@ CREATE TABLE IF NOT EXISTS status_sinkronisasi (
   id SMALLINT PRIMARY KEY CHECK (id IN (1, 2)),
   bentuk_aktif TEXT,
   offset_terakhir INTEGER NOT NULL DEFAULT 0,
-  waktu_selesai_terakhir TIMESTAMPTZ
+  waktu_selesai_terakhir TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ,
+  total_baru INTEGER NOT NULL DEFAULT 0,
+  total_diperbarui INTEGER NOT NULL DEFAULT 0,
+  total_tidak_berubah INTEGER NOT NULL DEFAULT 0,
+  total_dihapus INTEGER NOT NULL DEFAULT 0
 );
 
-INSERT INTO status_sinkronisasi (id, offset_terakhir)
-VALUES (1, 0), (2, 0)
+-- id 1: Full Sync
+-- id 2: Custom Sync
+INSERT INTO status_sinkronisasi (id, offset_terakhir, total_baru, total_diperbarui, total_tidak_berubah, total_dihapus)
+VALUES 
+  (1, 0, 0, 0, 0, 0), 
+  (2, 0, 0, 0, 0, 0)
 ON CONFLICT (id) DO NOTHING;
+
