@@ -50,10 +50,22 @@ export default {
         const bentukBerikutnya = activeRow.bentuk_aktif || 'tk';
         const offsetBerikutnya = activeRow.offset_terakhir || 0;
         
+        const totalEstimasi = activeRow.total_estimasi || 12654;
+        const totalSynced = (activeRow.total_baru || 0) + (activeRow.total_diperbarui || 0) + (activeRow.total_tidak_berubah || 0);
+        
         const currentIndex = VALID_BENTUK.indexOf(bentukBerikutnya);
-        const progressPercent = isCustom ? 100 : Math.max(0, Math.round((currentIndex / VALID_BENTUK.length) * 100));
+        let progressPercent = 0;
+        if (isCustom) {
+           progressPercent = totalEstimasi > 0 ? Math.min(100, Math.round((totalSynced / totalEstimasi) * 100)) : 0;
+        } else {
+           progressPercent = Math.max(0, Math.round((currentIndex / VALID_BENTUK.length) * 100));
+        }
         
         const selesai = isCustom ? (bentukBerikutnya === 'Selesai') : (bentukBerikutnya === 'tk' && offsetBerikutnya === 0 && activeRow.waktu_selesai_terakhir !== null && progressPercent === 0);
+        
+        if (selesai) {
+           progressPercent = 100;
+        }
 
         let isRunning = false;
         if (activeRow.updated_at && !selesai) {
@@ -207,6 +219,30 @@ export default {
         });
         jadwalHtml += '</div></div>';
 
+        // Fetch Log Aktivitas
+        let logAktivitasList = [];
+        try {
+          const { results: logRes } = await env.DB.prepare('SELECT * FROM log_aktivitas_provinsi ORDER BY waktu_selesai DESC LIMIT 5').all();
+          logAktivitasList = logRes || [];
+        } catch (e) {} // Abaikan jika tabel belum ada
+        
+        let logHtml = logAktivitasList.length > 0 ? logAktivitasList.map(log => {
+          const totalData = log.total_baru + log.total_diperbarui + log.total_tidak_berubah;
+          return `<div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 12px; font-size: 13px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+              <strong style="color: #e5e7eb;">${log.nama_provinsi}</strong>
+              <span style="color: var(--text-muted); font-size: 11px;">${log.waktu_selesai}</span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; text-align: center; font-size: 12px;">
+              <div style="color: var(--success);">${log.total_baru} Baru</div>
+              <div style="color: var(--info);">${log.total_diperbarui} Update</div>
+              <div style="color: var(--danger);">${log.total_dihapus} Hapus</div>
+              <div style="color: var(--text-muted);">${log.total_tidak_berubah} Tetap</div>
+            </div>
+            <div style="text-align: left; margin-top: 8px; font-weight: 600; color: #d1d5db; border-top: 1px solid var(--border); padding-top: 8px;">Total Data: ${totalData}</div>
+          </div>`;
+        }).join('') : '<div style="color: var(--text-muted); font-size: 13px;">Belum ada log aktivitas.</div>';
+
         const html = `<!DOCTYPE html>
 <html lang="id">
 <head>
@@ -333,8 +369,18 @@ export default {
   <div class="card">
     <div id="loader-icon" class="loader" style="${!isRunning && !selesai ? 'display: none;' : ''} ${selesai ? 'display: none;' : ''}"></div>
     
-    <div id="status" class="status-badge ${selesai ? 'finished' : (!isRunning ? 'stopped' : '')}">
+    <div id="status" class="status-badge ${selesai ? 'finished' : (!isRunning ? 'stopped' : '')}" style="margin-bottom: 12px;">
       ${selesai ? 'Sinkronisasi Selesai' : (isRunning ? 'Sedang Menyinkronkan...' : 'Menunggu / Terhenti')}
+    </div>
+    
+    <div style="max-width: 400px; margin: 0 auto 24px auto;">
+      <div class="progress-bar" style="margin-top: 0;">
+        <div class="progress-fill"></div>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--text-muted); margin-top: 8px; font-weight: 500;">
+        <span>${progressPercent}% Selesai</span>
+        <span>Data: ${totalSynced} / ${isCustom ? totalEstimasi : '12654'}</span>
+      </div>
     </div>
     
     <h1>Sekolah Sync Dashboard ${isCustom ? '<span style="color: #f59e0b; font-size: 14px; vertical-align: middle; background: rgba(245, 158, 11, 0.15); padding: 4px 10px; border-radius: 20px;">Custom</span>' : '<span style="color: var(--primary-light); font-size: 14px; vertical-align: middle; background: rgba(99, 102, 241, 0.15); padding: 4px 10px; border-radius: 20px;">Full</span>'}</h1>
@@ -363,11 +409,14 @@ export default {
       </div>
     </div>
     
-    <div class="progress-bar">
-      <div class="progress-fill"></div>
-    </div>
-    
     ${jadwalHtml}
+    
+    <div style="margin-top: 32px; text-align: left;">
+      <h2 style="font-size: 18px; margin-bottom: 16px; color: #fff; font-weight: 600; padding-bottom: 8px; border-bottom: 1px solid var(--border);">Log Aktivitas Terakhir</h2>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        ${logHtml}
+      </div>
+    </div>
     
     <a href="https://api-sekolah-kita.pages.dev/" class="btn" target="_blank" rel="noopener noreferrer">
       Kunjungi Website Utama
@@ -394,9 +443,14 @@ export default {
 
       try {
         const body = await request.json();
-        const { dataList, bentukAktif, offset, isFinished } = body;
+        const { dataList, bentukAktif, offset, isFinished, ...customParams } = body;
 
         let stats = { baru: 0, diperbarui: 0, tidakBerubah: 0, dihapus: 0 };
+        
+        // Ensure total_estimasi column exists
+        try {
+          await env.DB.prepare(`ALTER TABLE status_sinkronisasi ADD COLUMN total_estimasi INTEGER DEFAULT 0`).run();
+        } catch (e) {}
         
         if (dataList && dataList.length > 0) {
           stats = await syncBatch(env.DB, dataList);
@@ -433,6 +487,29 @@ export default {
 
             const delRes = await env.DB.prepare(query).bind(...params).run();
             stats.dihapus = delRes.meta.changes;
+            
+            // Ambil data status_sinkronisasi saat ini sebelum direset (untuk dicatat ke log_aktivitas)
+            const { results: currentStatsRes } = await env.DB.prepare(`SELECT * FROM status_sinkronisasi WHERE id = 2`).all();
+            const current = currentStatsRes[0] || {};
+            
+            // Catat ke log_aktivitas_provinsi
+            await env.DB.prepare(`CREATE TABLE IF NOT EXISTS log_aktivitas_provinsi (id INTEGER PRIMARY KEY AUTOINCREMENT, nama_provinsi TEXT, total_baru INTEGER, total_diperbarui INTEGER, total_dihapus INTEGER, total_tidak_berubah INTEGER, waktu_selesai TIMESTAMPTZ)`).run();
+            await env.DB.prepare(`
+               INSERT INTO log_aktivitas_provinsi (nama_provinsi, total_baru, total_diperbarui, total_dihapus, total_tidak_berubah, waktu_selesai)
+               VALUES (?, ?, ?, ?, ?, datetime('now', '+7 hours'))
+            `).bind(
+               body.namaProvinsi || 'SEMUA',
+               current.total_baru || 0,
+               current.total_diperbarui || 0,
+               stats.dihapus || 0,
+               current.total_tidak_berubah || 0
+            ).run();
+
+            // Hapus log aktivitas yang usianya lebih dari 3 hari
+            await env.DB.prepare(`
+               DELETE FROM log_aktivitas_provinsi WHERE waktu_selesai < datetime('now', '+7 hours', '-3 days')
+            `).run();
+
             // Update status_sinkronisasi untuk id = 2 (Custom Sync)
             await env.DB.prepare(`
               UPDATE status_sinkronisasi 
@@ -481,20 +558,20 @@ export default {
             const displayBentuk = body.namaProvinsi && body.namaProvinsi !== 'SEMUA' ? `${bentukAktif.toUpperCase()} (${body.namaProvinsi})` : bentukAktif.toUpperCase();
             let resetQuery = '';
             if (body.isStart) {
-              resetQuery = ', total_baru = excluded.total_baru, total_diperbarui = excluded.total_diperbarui, total_tidak_berubah = excluded.total_tidak_berubah, total_dihapus = 0';
+              resetQuery = ', total_baru = excluded.total_baru, total_diperbarui = excluded.total_diperbarui, total_tidak_berubah = excluded.total_tidak_berubah, total_dihapus = 0, total_estimasi = excluded.total_estimasi';
             }
             // Upsert for id = 2
             await env.DB.prepare(`
-              INSERT INTO status_sinkronisasi (id, bentuk_aktif, offset_terakhir, total_baru, total_diperbarui, total_tidak_berubah, updated_at, waktu_selesai_terakhir) 
-              VALUES (2, ?, ?, ?, ?, ?, datetime('now', '+7 hours'), datetime('now'))
+              INSERT INTO status_sinkronisasi (id, bentuk_aktif, offset_terakhir, total_baru, total_diperbarui, total_tidak_berubah, total_estimasi, updated_at, waktu_selesai_terakhir) 
+              VALUES (2, ?, ?, ?, ?, ?, ?, datetime('now', '+7 hours'), datetime('now'))
               ON CONFLICT(id) DO UPDATE SET
                 bentuk_aktif = excluded.bentuk_aktif,
                 offset_terakhir = excluded.offset_terakhir,
                 updated_at = excluded.updated_at,
                 waktu_selesai_terakhir = excluded.waktu_selesai_terakhir
-                ${resetQuery ? resetQuery : `, total_baru = status_sinkronisasi.total_baru + excluded.total_baru, total_diperbarui = status_sinkronisasi.total_diperbarui + excluded.total_diperbarui, total_tidak_berubah = status_sinkronisasi.total_tidak_berubah + excluded.total_tidak_berubah`}
+                ${resetQuery ? resetQuery : `, total_baru = status_sinkronisasi.total_baru + excluded.total_baru, total_diperbarui = status_sinkronisasi.total_diperbarui + excluded.total_diperbarui, total_tidak_berubah = status_sinkronisasi.total_tidak_berubah + excluded.total_tidak_berubah, total_estimasi = excluded.total_estimasi`}
             `).bind(
-              displayBentuk, offset, stats.baru, stats.diperbarui, stats.tidakBerubah
+              displayBentuk, offset, stats.baru, stats.diperbarui, stats.tidakBerubah, customParams.totalEstimasi || 0
             ).run();
           }
         }

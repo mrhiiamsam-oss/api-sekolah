@@ -145,6 +145,10 @@ async function fetchCustomData() {
   const startTime = Date.now();
   const LAMA_MAKSIMAL = 5 * 60 * 60 * 1000;
 
+  let previousProv = null;
+  let currentProvinceStarted = false;
+  let currentTotalEstimasi = 0;
+
   while (taskIndex < tasks.length) {
     if (Date.now() - startTime > LAMA_MAKSIMAL) {
       console.log("⚠️ Mendekati 5 jam! Berhenti untuk menghindari timeout GitHub.");
@@ -154,6 +158,23 @@ async function fetchCustomData() {
 
     const currentTask = tasks[taskIndex];
     const kodeWilayah = currentTask.prov;
+    
+    if (kodeWilayah !== previousProv) {
+      currentProvinceStarted = false;
+      previousProv = kodeWilayah;
+      
+      try {
+        const totalUrl = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=1&offset=0`;
+        const totalRes = await fetch(totalUrl);
+        const totalJson = await totalRes.json();
+        currentTotalEstimasi = totalJson.meta ? totalJson.meta.total : 0;
+        console.log(`📊 Estimasi total data untuk provinsi ${kodeWilayah}: ${currentTotalEstimasi}`);
+      } catch (err) {
+        console.error(`Gagal mendapatkan estimasi total data:`, err);
+        currentTotalEstimasi = 0;
+      }
+    }
+
     const bentukAktif = currentTask.bentuk;
     const url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=${limit}&offset=${offset}&bentukPendidikan=${bentukAktif}`;
 
@@ -167,21 +188,40 @@ async function fetchCustomData() {
         offset = 0;
         taskIndex++;
         console.log(`➡️ Selesai untuk tipe sekolah [${bentukAktif.toUpperCase()}] wilayah ${kodeWilayah}. Pindah ke antrean berikutnya.`);
+        
+        const isProvinceFinished = taskIndex >= tasks.length || tasks[taskIndex].prov !== kodeWilayah;
+        if (isProvinceFinished) {
+          console.log(`✨ Selesai sinkronisasi seluruh bentuk untuk provinsi ${kodeWilayah}. Melakukan pembersihan...`);
+          const provNameDB = kodeWilayah === "360" ? "SEMUA" : PROVINCES[kodeWilayah];
+          try {
+            const { stats } = await postBatchToWorker([], 'tk', 0, true, {
+              bentukList,
+              namaProvinsi: provNameDB,
+              waktuMulai: waktuMulai
+            });
+            console.log(`🧹 Berhasil membersihkan data lama untuk ${provNameDB}. ${stats?.dihapus || 0} sekolah dihapus dan aktivitas dicatat.`);
+          } catch (e) {
+            console.error(`Gagal membersihkan data lama untuk ${provNameDB}:`, e);
+          }
+        }
         continue;
       }
 
       offset += limit;
       
       const provNameDB = kodeWilayah === "360" ? "SEMUA" : PROVINCES[kodeWilayah];
+      const isStartProv = !currentProvinceStarted;
+      
       const customParams = {
         bentukList,
         namaProvinsi: provNameDB,
         waktuMulai,
-        isStart: isFirstBatch
+        isStart: isStartProv,
+        totalEstimasi: currentTotalEstimasi
       };
       
       const { stats } = await postBatchToWorker(dataList, bentukAktif, offset, false, customParams);
-      isFirstBatch = false;
+      currentProvinceStarted = true;
       
       console.log(`Offset ${offset - limit} [${bentukAktif}]: ${dataList.length} ditarik — ${stats.tidakBerubah} tetap, ${stats.baru} baru, ${stats.diperbarui} update.`);
 
@@ -195,22 +235,6 @@ async function fetchCustomData() {
   }
   
   if (taskIndex >= tasks.length) {
-    console.log("✨ Melakukan pembersihan data yang tidak lagi ada di sumber...");
-    
-    for (const provCode of kodeWilayahList) {
-      const provNameDB = provCode === "360" ? "SEMUA" : PROVINCES[provCode];
-      try {
-        const { stats } = await postBatchToWorker([], 'tk', 0, true, {
-          bentukList,
-          namaProvinsi: provNameDB,
-          waktuMulai: waktuMulai
-        });
-        console.log(`🧹 Berhasil membersihkan data lama untuk ${provNameDB}. ${stats.dihapus || 0} sekolah dihapus.`);
-      } catch (e) {
-        console.error(`Gagal membersihkan data lama untuk ${provNameDB}:`, e);
-      }
-    }
-    
     console.log("🎉 SINKRONISASI KHUSUS SELESAI!");
   }
 }
