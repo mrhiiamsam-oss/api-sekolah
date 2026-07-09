@@ -231,13 +231,13 @@ export default {
             // Update status_sinkronisasi untuk id = 2 (Custom Sync)
             await env.DB.prepare(`
               UPDATE status_sinkronisasi 
-              SET total_dihapus = total_dihapus + ?, bentuk_aktif = 'Selesai', waktu_selesai_terakhir = datetime('now', '+7 hours'), updated_at = datetime('now', '+7 hours')
+              SET total_dihapus = total_dihapus + ?, bentuk_aktif = 'Selesai', waktu_selesai_terakhir = datetime('now'), updated_at = datetime('now', '+7 hours')
               WHERE id = 2
             `).bind(stats.dihapus).run();
           } else {
             await env.DB.prepare(`
               UPDATE status_sinkronisasi 
-              SET bentuk_aktif = 'tk', offset_terakhir = 0, waktu_selesai_terakhir = datetime('now', '+7 hours'), updated_at = datetime('now', '+7 hours')
+              SET bentuk_aktif = 'tk', offset_terakhir = 0, waktu_selesai_terakhir = datetime('now'), updated_at = datetime('now', '+7 hours')
               WHERE id = 1
             `).run();
 
@@ -266,7 +266,7 @@ export default {
           if (!body.customSync) {
             await env.DB.prepare(`
               UPDATE status_sinkronisasi 
-              SET bentuk_aktif = ?, offset_terakhir = ?, updated_at = datetime('now', '+7 hours')
+              SET bentuk_aktif = ?, offset_terakhir = ?, updated_at = datetime('now', '+7 hours'), waktu_selesai_terakhir = datetime('now')
               ${resetStats ? resetStats : ', total_baru = total_baru + ?, total_diperbarui = total_diperbarui + ?, total_tidak_berubah = total_tidak_berubah + ?'}
               WHERE id = 1
             `).bind(
@@ -280,12 +280,13 @@ export default {
             }
             // Upsert for id = 2
             await env.DB.prepare(`
-              INSERT INTO status_sinkronisasi (id, bentuk_aktif, offset_terakhir, total_baru, total_diperbarui, total_tidak_berubah, updated_at) 
-              VALUES (2, ?, ?, ?, ?, ?, datetime('now', '+7 hours'))
+              INSERT INTO status_sinkronisasi (id, bentuk_aktif, offset_terakhir, total_baru, total_diperbarui, total_tidak_berubah, updated_at, waktu_selesai_terakhir) 
+              VALUES (2, ?, ?, ?, ?, ?, datetime('now', '+7 hours'), datetime('now'))
               ON CONFLICT(id) DO UPDATE SET
                 bentuk_aktif = excluded.bentuk_aktif,
                 offset_terakhir = excluded.offset_terakhir,
-                updated_at = excluded.updated_at
+                updated_at = excluded.updated_at,
+                waktu_selesai_terakhir = excluded.waktu_selesai_terakhir
                 ${resetQuery ? resetQuery : `, total_baru = status_sinkronisasi.total_baru + excluded.total_baru, total_diperbarui = status_sinkronisasi.total_diperbarui + excluded.total_diperbarui, total_tidak_berubah = status_sinkronisasi.total_tidak_berubah + excluded.total_tidak_berubah`}
             `).bind(
               displayBentuk, offset, stats.baru, stats.diperbarui, stats.tidakBerubah
