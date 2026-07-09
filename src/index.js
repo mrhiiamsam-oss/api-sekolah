@@ -81,7 +81,8 @@ export default {
         const currentDayIndex = todayId === 0 ? 7 : todayId;
         
         // Dapatkan representasi tanggal jam 00:00 di WIB untuk kalkulasi offset hari
-        const today00WIB = new Date(Date.UTC(dateWIB.getUTCFullYear(), dateWIB.getUTCMonth(), dateWIB.getUTCDate()));
+        const today00Utc = Date.UTC(dateWIB.getUTCFullYear(), dateWIB.getUTCMonth(), dateWIB.getUTCDate());
+        const today00WibAbsoluteMs = today00Utc - (7 * 60 * 60 * 1000); // Absolute timestamp 00:00 WIB hari ini
 
         let jadwalHtml = '<div class="jadwal-container"><h2>Jadwal Sinkronisasi Mingguan (00:00 WIB)</h2><div class="jadwal-grid">';
         jadwal.forEach(j => {
@@ -95,7 +96,7 @@ export default {
           const isPast = diff === -1;
           
           // Hitung tanggal target
-          const targetTime = today00WIB.getTime() + (diff * 24 * 60 * 60 * 1000);
+          const targetTime = today00Utc + (diff * 24 * 60 * 60 * 1000);
           const targetDate = new Date(targetTime);
           
           const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
@@ -118,16 +119,55 @@ export default {
               statusText = 'Selesai';
               itemClass = 'prov-item done';
             } else if (isToday) {
-              // Jika ini adalah Custom Sync dan nama provinsinya sedang diproses
-              if (isRunning && activeRow.bentuk_aktif && activeRow.bentuk_aktif.includes(prov)) {
-                statusIcon = '<span class="spin-icon">🔄</span>';
-                statusText = 'Proses';
-                itemClass = 'prov-item processing';
-              } else if (selesai && activeRow.bentuk_aktif && activeRow.bentuk_aktif.includes(prov)) {
-                // Jika sudah selesai baru saja
+              let provIndex = j.provs.indexOf(prov);
+              let activeProvIndex = j.provs.findIndex(p => activeRow.bentuk_aktif && activeRow.bentuk_aktif.includes(p));
+              
+              // Cek apakah ada update hari ini
+              let isUpdatedToday = false;
+              if (activeRow.updated_at) {
+                const activeUpdatedDate = new Date(activeRow.updated_at.replace(' ', 'T') + '+07:00');
+                if (activeUpdatedDate.getTime() >= today00WibAbsoluteMs) {
+                  isUpdatedToday = true;
+                }
+              }
+
+              if (!isUpdatedToday) {
+                // Belum ada aktivitas apa-apa hari ini
+                statusIcon = '🕒';
+                statusText = 'Menunggu';
+                itemClass = 'prov-item waiting';
+              } else if (selesai) {
+                // Selesai semua untuk hari ini
                 statusIcon = '✅';
                 statusText = 'Selesai';
                 itemClass = 'prov-item done';
+              } else if (activeProvIndex !== -1) {
+                if (provIndex < activeProvIndex) {
+                  // Provinsi sebelumnya yang sudah terlewati
+                  statusIcon = '✅';
+                  statusText = 'Selesai';
+                  itemClass = 'prov-item done';
+                } else if (provIndex === activeProvIndex) {
+                  // Sedang berjalan
+                  if (isRunning) {
+                    statusIcon = '<span class="spin-icon">🔄</span>';
+                    statusText = 'Proses';
+                    itemClass = 'prov-item processing';
+                  } else {
+                    statusIcon = '⚠️';
+                    statusText = 'Terhenti / Menunggu';
+                    itemClass = 'prov-item waiting';
+                  }
+                } else {
+                  // Belum sampai giliran
+                  statusIcon = '🕒';
+                  statusText = 'Menunggu';
+                  itemClass = 'prov-item waiting';
+                }
+              } else {
+                statusIcon = '🕒';
+                statusText = 'Menunggu';
+                itemClass = 'prov-item waiting';
               }
             }
             
