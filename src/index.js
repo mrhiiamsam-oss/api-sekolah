@@ -246,7 +246,29 @@ export default {
       .stat-box { padding: 12px; }
     }
   </style>
-  <meta http-equiv="refresh" content="5">
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      // Restore window scroll
+      const scrollPos = sessionStorage.getItem("scrollPos");
+      if (scrollPos) {
+        window.scrollTo(0, parseInt(scrollPos));
+      }
+      // Restore grid scroll
+      const gridScrollPos = sessionStorage.getItem("gridScrollPos");
+      const gridEl = document.querySelector(".jadwal-grid");
+      if (gridScrollPos && gridEl) {
+        gridEl.scrollTop = parseInt(gridScrollPos);
+      }
+    });
+    setTimeout(() => {
+      sessionStorage.setItem("scrollPos", window.scrollY);
+      const gridEl = document.querySelector(".jadwal-grid");
+      if (gridEl) {
+        sessionStorage.setItem("gridScrollPos", gridEl.scrollTop);
+      }
+      window.location.reload();
+    }, 5000);
+  </script>
 </head>
 <body>
   <div class="card">
