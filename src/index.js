@@ -210,7 +210,7 @@ export default {
         // Jika mulai dari awal (tk, offset 0), kita reset statistiknya
         let resetStats = "";
         if (bentukAktif === 'tk' && offset === 0) {
-          resetStats = ", total_baru = 0, total_diperbarui = 0, total_tidak_berubah = 0, total_dihapus = 0";
+          resetStats = ", total_baru = 0, total_diperbarui = 0, total_tidak_berubah = 0, total_dihapus = 0, waktu_mulai_sinkronisasi = datetime('now', '+7 hours')";
         }
 
         if (isFinished) {
@@ -241,9 +241,9 @@ export default {
               WHERE id = 1
             `).run();
 
-            // Hapus sekolah yang tidak ada di API lagi (migrated_at lebih lama dari 2 hari yang lalu)
+            // Hapus sekolah yang usianya lebih lama dari waktu mulai sinkronisasi siklus ini
             const delRes = await env.DB.prepare(`
-              DELETE FROM sekolah WHERE migrated_at < datetime('now', '+7 hours', '-2 days')
+              DELETE FROM sekolah WHERE migrated_at < (SELECT waktu_mulai_sinkronisasi FROM status_sinkronisasi WHERE id = 1)
             `).run();
             
             stats.dihapus = delRes.meta.changes;
