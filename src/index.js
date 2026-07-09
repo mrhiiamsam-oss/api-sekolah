@@ -83,7 +83,7 @@ export default {
         // Dapatkan representasi tanggal jam 00:00 di WIB untuk kalkulasi offset hari
         const today00WIB = new Date(Date.UTC(dateWIB.getUTCFullYear(), dateWIB.getUTCMonth(), dateWIB.getUTCDate()));
 
-        let jadwalHtml = '<div class="jadwal-container"><h2>Jadwal Sinkronisasi Mingguan (02:00 WIB)</h2><div class="jadwal-grid">';
+        let jadwalHtml = '<div class="jadwal-container"><h2>Jadwal Sinkronisasi Mingguan (00:00 WIB)</h2><div class="jadwal-grid">';
         jadwal.forEach(j => {
           const jIndex = j.id === 0 ? 7 : j.id;
           
