@@ -138,68 +138,37 @@ export default {
             let statusText = 'Menunggu';
             let itemClass = 'prov-item waiting';
             
-            let lastSyncTime = provSyncMap[prov] || 0;
+            const cleanName = (name) => name.replace(/[^A-Z]/g, '');
+            const matchingKey = Object.keys(provSyncMap).find(k => cleanName(k) === cleanName(prov));
+            let lastSyncTime = matchingKey ? provSyncMap[matchingKey] : 0;
             
-            if (isPast) {
-              if (lastSyncTime >= targetTime) {
-                statusIcon = '✅';
-                statusText = 'Selesai';
-                itemClass = 'prov-item done';
-              } else {
-                statusIcon = '❌';
-                statusText = 'Terlewat / Gagal';
-                itemClass = 'prov-item waiting'; // biarkan abu-abu/merah
-              }
-            } else if (isToday) {
-              let provIndex = j.provs.indexOf(prov);
-              let activeProvIndex = j.provs.findIndex(p => activeRow.bentuk_aktif && activeRow.bentuk_aktif.includes(p));
-              
-              // Cek apakah ada update hari ini
-              let isUpdatedToday = false;
-              if (activeRow.updated_at) {
-                const activeUpdatedDate = new Date(activeRow.updated_at.replace(' ', 'T') + '+07:00');
-                if (activeUpdatedDate.getTime() >= today00WibAbsoluteMs) {
-                  isUpdatedToday = true;
-                }
-              }
+            const isCurrentlyRunning = isRunning && activeRow.bentuk_aktif && cleanName(activeRow.bentuk_aktif).includes(cleanName(prov));
+            const isCompleted = lastSyncTime >= targetTime;
+            const isActiveButNotRunning = !isRunning && activeRow.bentuk_aktif && cleanName(activeRow.bentuk_aktif).includes(cleanName(prov));
 
-              if (!isUpdatedToday) {
-                // Belum ada aktivitas apa-apa hari ini
-                statusIcon = '🕒';
-                statusText = 'Menunggu';
-                itemClass = 'prov-item waiting';
-              } else if (selesai) {
-                // Selesai semua untuk hari ini
+            if (isPast || isToday) {
+              if (isCurrentlyRunning) {
+                statusIcon = '<span class="spin-icon">🔄</span>';
+                statusText = 'Proses';
+                itemClass = 'prov-item processing';
+              } else if (isCompleted) {
                 statusIcon = '✅';
                 statusText = 'Selesai';
                 itemClass = 'prov-item done';
-              } else if (activeProvIndex !== -1) {
-                if (provIndex < activeProvIndex) {
-                  // Provinsi sebelumnya yang sudah terlewati
-                  statusIcon = '✅';
-                  statusText = 'Selesai';
-                  itemClass = 'prov-item done';
-                } else if (provIndex === activeProvIndex) {
-                  // Sedang berjalan
-                  if (isRunning) {
-                    statusIcon = '<span class="spin-icon">🔄</span>';
-                    statusText = 'Proses';
-                    itemClass = 'prov-item processing';
-                  } else {
-                    statusIcon = '⚠️';
-                    statusText = 'Terhenti / Menunggu';
-                    itemClass = 'prov-item waiting';
-                  }
+              } else if (isActiveButNotRunning) {
+                statusIcon = '⚠️';
+                statusText = 'Terhenti / Menunggu';
+                itemClass = 'prov-item waiting';
+              } else {
+                if (isPast) {
+                  statusIcon = '❌';
+                  statusText = 'Terlewat / Gagal';
+                  itemClass = 'prov-item waiting';
                 } else {
-                  // Belum sampai giliran
                   statusIcon = '🕒';
                   statusText = 'Menunggu';
                   itemClass = 'prov-item waiting';
                 }
-              } else {
-                statusIcon = '🕒';
-                statusText = 'Menunggu';
-                itemClass = 'prov-item waiting';
               }
             }
             
