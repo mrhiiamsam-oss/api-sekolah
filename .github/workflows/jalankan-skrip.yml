@@ -1,24 +1,22 @@
-name: Trigger Cloudflare Worker Sync (D1)
+name: Trigger Cloudflare Worker Sync (D1) Harian (Cicilan)
 
 on:
   workflow_dispatch:
     inputs:
-      mulai_dari_awal:
-        description: 'Mulai dari offset 0 (centang hanya jika ingin scan ulang dari awal)'
-        type: boolean
-        default: false
+      pilihan_provinsi:
+        description: '(Opsional) Timpa provinsi dengan manual (misal: DKI JAKARTA). Kosongkan untuk ikut jadwal.'
+        type: string
+        default: ''
   schedule:
-    # Menggunakan standar waktu UTC.
-    # Jam 16:00 UTC itu sama dengan Jam 23:00 WIB.
-    # Dijalankan setiap hari SELASA
-    - cron: '0 16 * * 2'
+    # Berjalan SETIAP HARI jam 16:00 UTC (23:00 WIB)
+    - cron: '0 16 * * *'
 
 permissions:
   actions: write
   contents: read
 
 jobs:
-  run-script:
+  run-daily-chunk:
     runs-on: ubuntu-latest
     steps:
       - name: Ambil kode dari repository
@@ -32,21 +30,34 @@ jobs:
       - name: Install module
         run: npm install
 
-      - name: Jalankan Skrip
+      - name: Tentukan Provinsi Berdasarkan Hari
+        run: |
+          DAY_OF_WEEK=$(date +%u) # 1=Senin, 7=Minggu
+          
+          # Jika di-trigger manual dan ada input provinsi
+          if [ "${{ github.event.inputs.pilihan_provinsi }}" != "" ]; then
+            PROVINSI="${{ github.event.inputs.pilihan_provinsi }}"
+            echo "Menjalankan manual untuk provinsi: $PROVINSI"
+          else
+            case $DAY_OF_WEEK in
+              1) PROVINSI="JAWA BARAT, BALI, BENGKULU, GORONTALO, SULAWESI BARAT" ;;
+              2) PROVINSI="JAWA TIMUR, DI YOGYAKARTA, KEPULAUAN BANGKA BELITUNG, KALIMANTAN UTARA, MALUKU UTARA" ;;
+              3) PROVINSI="JAWA TENGAH, BANTEN, KEPULAUAN RIAU, PAPUA BARAT, PAPUA BARAT DAYA" ;;
+              4) PROVINSI="SUMATERA UTARA, DKI JAKARTA, ACEH, JAMBI, PAPUA, PAPUA SELATAN" ;;
+              5) PROVINSI="SUMATERA SELATAN, LAMPUNG, RIAU, SUMATERA BARAT, PAPUA TENGAH, PAPUA PEGUNUNGAN" ;;
+              6) PROVINSI="SULAWESI SELATAN, SULAWESI TENGGARA, SULAWESI TENGAH, SULAWESI UTARA, KALIMANTAN TIMUR, MALUKU" ;;
+              7) PROVINSI="KALIMANTAN BARAT, KALIMANTAN SELATAN, KALIMANTAN TENGAH, NUSA TENGGARA TIMUR, NUSA TENGGARA BARAT" ;;
+            esac
+            echo "Jadwal Hari $DAY_OF_WEEK: Menjalankan provinsi: $PROVINSI"
+          fi
+          
+          echo "TARGET_PROVINSI=$PROVINSI" >> $GITHUB_ENV
+
+      - name: Jalankan Skrip Custom (Cicilan Harian)
         env:
           CLOUDFLARE_WORKER_URL: ${{ secrets.CLOUDFLARE_WORKER_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          # schedule (mingguan): scan penuh dari offset 0 | manual: sesuai centang | auto-retrigger: lanjut offset
-          MULAI_DARI_AWAL: ${{ github.event_name == 'schedule' && '1' || (github.event_name == 'workflow_dispatch' && inputs.mulai_dari_awal && '1') || '' }}
-        run: node index.js
-
-      - name: Jalankan Ulang Otomatis Jika Belum Selesai
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ -f lanjutkan.txt ]; then
-            echo "Deteksi data belum selesai. Memicu workflow baru (lanjut dari offset tersimpan)..."
-            gh workflow run jalankan-skrip.yml -f mulai_dari_awal=false
-          else
-            echo "Selesai! Tidak ada data tersisa untuk ditarik."
-          fi
+          PILIHAN_BENTUK: "Semua"
+          PILIHAN_PROVINSI: ${{ env.TARGET_PROVINSI }}
+          MULAI_DARI_AWAL: "true"
+        run: node fetch-custom.js
