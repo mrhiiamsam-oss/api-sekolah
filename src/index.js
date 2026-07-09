@@ -198,18 +198,45 @@ export default {
         }
 
         if (isFinished) {
-          await env.DB.prepare(`
-            UPDATE status_sinkronisasi 
-            SET bentuk_aktif = 'tk', offset_terakhir = 0, waktu_selesai_terakhir = datetime('now', '+7 hours'), updated_at = datetime('now', '+7 hours')
-            WHERE id = 1
-          `).run();
+          if (body.customSync) {
+            // Cleanup khusus untuk Custom Sync
+            const placeholders = body.bentukList.map(() => '?').join(',');
+            let query = `DELETE FROM sekolah WHERE bentuk_pendidikan IN (${placeholders}) AND migrated_at < ?`;
+            let params = [...body.bentukList, body.waktuMulai];
 
-          // Hapus sekolah yang tidak ada di API lagi (migrated_at lebih lama dari 2 hari yang lalu)
-          const delRes = await env.DB.prepare(`
-            DELETE FROM sekolah WHERE migrated_at < datetime('now', '+7 hours', '-2 days')
-          `).run();
-          
-          stats.dihapus = delRes.meta.changes;
+            if (body.namaProvinsi && body.namaProvinsi !== 'SEMUA') {
+               query = `DELETE FROM sekolah WHERE bentuk_pendidikan IN (${placeholders}) AND nama_provinsi LIKE ? AND migrated_at < ?`;
+               params = [...body.bentukList, `%${body.namaProvinsi}%`, body.waktuMulai];
+            }
+
+            const delRes = await env.DB.prepare(query).bind(...params).run();
+            stats.dihapus = delRes.meta.changes;
+
+            await env.DB.prepare(`
+              UPDATE status_sinkronisasi 
+              SET total_dihapus = total_dihapus + ? 
+              WHERE id = 1
+            `).bind(stats.dihapus).run();
+          } else {
+            await env.DB.prepare(`
+              UPDATE status_sinkronisasi 
+              SET bentuk_aktif = 'tk', offset_terakhir = 0, waktu_selesai_terakhir = datetime('now', '+7 hours'), updated_at = datetime('now', '+7 hours')
+              WHERE id = 1
+            `).run();
+
+            // Hapus sekolah yang tidak ada di API lagi (migrated_at lebih lama dari 2 hari yang lalu)
+            const delRes = await env.DB.prepare(`
+              DELETE FROM sekolah WHERE migrated_at < datetime('now', '+7 hours', '-2 days')
+            `).run();
+            
+            stats.dihapus = delRes.meta.changes;
+            
+            await env.DB.prepare(`
+              UPDATE status_sinkronisasi 
+              SET total_dihapus = total_dihapus + ? 
+              WHERE id = 1
+            `).bind(stats.dihapus).run();
+          }
           
           await env.DB.prepare(`
             UPDATE status_sinkronisasi 

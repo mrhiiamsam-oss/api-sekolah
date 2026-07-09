@@ -35,11 +35,18 @@ const PROVINCES = {
   "350000": "PAPUA SELATAN", "360000": "PAPUA TENGAH", "370000": "PAPUA PEGUNUNGAN", "380000": "PAPUA BARAT DAYA"
 };
 
-async function postBatchToWorker(dataList, bentukAktif, offset, isFinished) {
+async function postBatchToWorker(dataList, bentukAktif, offset, isFinished, customSyncParams = null) {
+  const payload = { dataList, bentukAktif, offset, isFinished };
+  if (customSyncParams) {
+    payload.customSync = true;
+    payload.bentukList = customSyncParams.bentukList;
+    payload.namaProvinsi = customSyncParams.namaProvinsi;
+    payload.waktuMulai = customSyncParams.waktuMulai;
+  }
   const res = await fetch(`${WORKER_URL}/sync-batch`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
-    body: JSON.stringify({ dataList, bentukAktif, offset, isFinished })
+    body: JSON.stringify(payload)
   });
   if (!res.ok) throw new Error('Gagal push batch ke Worker: ' + await res.text());
   return await res.json();
@@ -69,6 +76,7 @@ async function fetchCustomData() {
 
   let bentukIndex = 0;
   let offset = 0;
+  let waktuMulai = process.env.WAKTU_MULAI || "";
 
   if (!mulaiDariAwal) {
     bentukIndex = parseInt(process.env.LANJUTAN_INDEX || '0', 10);
@@ -76,6 +84,15 @@ async function fetchCustomData() {
     if (bentukIndex > 0 || offset > 0) {
       console.log(`Melanjutkan dari iterasi sebelumnya: Index Bentuk ${bentukIndex} (${bentukList[bentukIndex]}), Offset ${offset}`);
     }
+  }
+
+  if (!waktuMulai) {
+    // Buat waktu mulai baru dalam format UTC+7 YYYY-MM-DD HH:MM:SS
+    const d = new Date(new Date().getTime() + 7 * 3600 * 1000);
+    waktuMulai = d.toISOString().replace('T', ' ').substring(0, 19);
+    console.log(`Waktu mulai sync baru: ${waktuMulai}`);
+  } else {
+    console.log(`Menggunakan waktu mulai dari iterasi sebelumnya: ${waktuMulai}`);
   }
 
   const limit = 20;
@@ -87,7 +104,7 @@ async function fetchCustomData() {
     if (Date.now() - startTime > LAMA_MAKSIMAL) {
       console.log("⚠️ Mendekati 5 jam! Berhenti untuk menghindari timeout GitHub.");
       // Simpan state agar bisa dibaca oleh shell script GH Actions
-      fs.writeFileSync('lanjutkan_custom.json', JSON.stringify({ bentukIndex, offset }));
+      fs.writeFileSync('lanjutkan_custom.json', JSON.stringify({ bentukIndex, offset, waktuMulai }));
       break;
     }
 
@@ -122,6 +139,20 @@ async function fetchCustomData() {
   }
   
   if (bentukIndex >= bentukList.length) {
+    console.log("✨ Melakukan pembersihan data yang tidak lagi ada di sumber...");
+    const provNameDB = kodeWilayah === "360" ? "SEMUA" : PROVINCES[kodeWilayah];
+    
+    try {
+      const { stats } = await postBatchToWorker([], 'tk', 0, true, {
+        bentukList,
+        namaProvinsi: provNameDB,
+        waktuMulai: waktuMulai
+      });
+      console.log(`🧹 Berhasil membersihkan data lama. ${stats.dihapus || 0} sekolah dihapus.`);
+    } catch (e) {
+      console.error("Gagal membersihkan data lama:", e);
+    }
+    
     console.log("🎉 SINKRONISASI KHUSUS SELESAI!");
   }
 }

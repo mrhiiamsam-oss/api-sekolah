@@ -36,6 +36,10 @@ on:
         description: '(Internal) Lanjutan offset'
         type: string
         default: '0'
+      waktu_mulai:
+        description: '(Internal) Waktu mulai sync untuk keperluan hapus data'
+        type: string
+        default: ''
 
 permissions:
   actions: write
@@ -65,6 +69,7 @@ jobs:
           MULAI_DARI_AWAL: ${{ github.event.inputs.mulai_dari_awal }}
           LANJUTAN_INDEX: ${{ github.event.inputs.lanjutan_index }}
           LANJUTAN_OFFSET: ${{ github.event.inputs.lanjutan_offset }}
+          WAKTU_MULAI: ${{ github.event.inputs.waktu_mulai }}
         run: node fetch-custom.js
 
       - name: Jalankan Ulang Otomatis Jika Belum Selesai
@@ -75,12 +80,14 @@ jobs:
             echo "Deteksi data custom belum selesai. Memicu workflow baru untuk melanjutkan..."
             NEXT_INDEX=$(jq -r '.bentukIndex' lanjutkan_custom.json)
             NEXT_OFFSET=$(jq -r '.offset' lanjutkan_custom.json)
+            WAKTU_MULAI_LAMA=$(jq -r '.waktuMulai' lanjutkan_custom.json)
             gh workflow run jalankan-skrip-custom.yml \
               -f pilihan_bentuk="${{ github.event.inputs.pilihan_bentuk }}" \
               -f pilihan_provinsi="${{ github.event.inputs.pilihan_provinsi }}" \
               -f mulai_dari_awal=false \
               -f lanjutan_index="${NEXT_INDEX}" \
-              -f lanjutan_offset="${NEXT_OFFSET}"
+              -f lanjutan_offset="${NEXT_OFFSET}" \
+              -f waktu_mulai="${WAKTU_MULAI_LAMA}"
           else
             echo "Selesai! Tidak ada data tersisa untuk ditarik."
           fi
