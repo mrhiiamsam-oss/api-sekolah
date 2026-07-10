@@ -88,13 +88,13 @@ export default {
 
         // Data Jadwal Sinkronisasi Mingguan per Provinsi (sesuai jalankan-skrip.yml)
         const jadwal = [
-          { hari: 'Senin', id: 1, provs: ['JAWA BARAT', 'BALI', 'BENGKULU', 'GORONTALO', 'SULAWESI BARAT'] },
+          { hari: 'Senin', id: 1, provs: ['JAWA BARAT', 'GORONTALO', 'SULAWESI BARAT'] },
           { hari: 'Selasa', id: 2, provs: ['JAWA TIMUR', 'KEPULAUAN BANGKA BELITUNG', 'KALIMANTAN UTARA'] },
           { hari: 'Rabu', id: 3, provs: ['JAWA TENGAH', 'BANTEN', 'KEPULAUAN RIAU', 'PAPUA BARAT', 'PAPUA BARAT DAYA'] },
           { hari: 'Kamis', id: 4, provs: ['SUMATERA UTARA', 'DKI JAKARTA', 'ACEH', 'JAMBI', 'PAPUA', 'PAPUA SELATAN'] },
           { hari: 'Jumat', id: 5, provs: ['SUMATERA SELATAN', 'LAMPUNG', 'RIAU', 'SUMATERA BARAT', 'PAPUA TENGAH', 'PAPUA PEGUNUNGAN'] },
           { hari: 'Sabtu', id: 6, provs: ['SULAWESI SELATAN', 'SULAWESI TENGGARA', 'SULAWESI TENGAH', 'SULAWESI UTARA', 'KALIMANTAN TIMUR', 'MALUKU', 'DI YOGYAKARTA', 'MALUKU UTARA'] },
-          { hari: 'Minggu', id: 0, provs: ['KALIMANTAN BARAT', 'KALIMANTAN SELATAN', 'KALIMANTAN TENGAH', 'NUSA TENGGARA TIMUR', 'NUSA TENGGARA BARAT', 'LUAR NEGERI'] }
+          { hari: 'Minggu', id: 0, provs: ['KALIMANTAN BARAT', 'KALIMANTAN SELATAN', 'KALIMANTAN TENGAH', 'NUSA TENGGARA TIMUR', 'NUSA TENGGARA BARAT', 'LUAR NEGERI', 'BALI', 'BENGKULU'] }
         ];
 
         // Kalkulasi waktu menggunakan UTC yang ditambahkan offset WIB (+7 jam)
