@@ -92,11 +92,19 @@ async function fetchCustomData() {
     const parts = argProvinsi.split(',').map(p => p.trim()).filter(p => p);
     for (const p of parts) {
       const searchP = p.replace(/[^A-Z0-9]/g, '');
-      const foundCode = Object.keys(PROVINCES).find(k => {
+      // 1. Coba cari exact match dulu
+      let foundCode = Object.keys(PROVINCES).find(k => {
         const cleanK = k.replace(/[^A-Z0-9]/g, '');
         const cleanV = PROVINCES[k].replace(/[^A-Z0-9]/g, '');
-        return cleanK === searchP || cleanV === searchP || cleanV.includes(searchP);
+        return cleanK === searchP || cleanV === searchP;
       });
+      // 2. Jika tidak ada, baru coba substring match (.includes)
+      if (!foundCode) {
+        foundCode = Object.keys(PROVINCES).find(k => {
+          const cleanV = PROVINCES[k].replace(/[^A-Z0-9]/g, '');
+          return cleanV.includes(searchP);
+        });
+      }
       if (foundCode) {
         kodeWilayahList.push(foundCode);
         console.log(`Provinsi dikenali: ${PROVINCES[foundCode]} (Kode: ${foundCode}) dari input '${p}'`);
