@@ -534,15 +534,19 @@ export default {
         // Fetch dari DB
         const { results: dbRes } = await env.DB.prepare('SELECT nama_provinsi as provinsi, COUNT(*) as total_db FROM sekolah GROUP BY nama_provinsi').all();
         
+        const cleanName = (name) => {
+          if (!name) return "";
+          let c = name.replace(/[^A-Z]/gi, '').toUpperCase();
+          return c.replace(/^PROVINSI|^PROV/, '');
+        };
+
         const dbMap = {};
         dbRes.forEach(r => {
-          const cleanedName = r.provinsi.replace(/[^A-Z]/gi, '').toUpperCase();
-          dbMap[cleanedName] = r.total_db;
+          dbMap[cleanName(r.provinsi)] = r.total_db;
         });
 
         const comparison = apiData.map(d => {
-           const cleanedNama = d.nama.replace(/[^A-Z]/gi, '').toUpperCase();
-           const total_db = dbMap[cleanedNama] || 0;
+           const total_db = dbMap[cleanName(d.nama)] || 0;
            const selisih = d.total_api - total_db;
            return { ...d, total_db, selisih };
         });
