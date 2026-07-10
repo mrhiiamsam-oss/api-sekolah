@@ -699,10 +699,16 @@ export default {
           dbMap[cleanName(r.provinsi)] = r.total_db;
         });
 
+        const API_DUPLICATES = {
+          '250000': 1 // PAPUA memiliki 1 NPSN duplikat di API Belajar.id (SDN PERSIAPAN SUASESO)
+        };
+
         const comparison = apiData.map(d => {
+           const duplicateOffset = API_DUPLICATES[d.kode] || 0;
+           const adjustedTotalApi = d.total_api - duplicateOffset;
            const total_db = dbMap[cleanName(d.nama)] || 0;
-           const selisih = d.total_api - total_db;
-           return { ...d, total_db, selisih };
+           const selisih = adjustedTotalApi - total_db;
+           return { ...d, total_api: adjustedTotalApi, total_db, selisih };
         });
         
         comparison.sort((a, b) => {
