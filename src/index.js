@@ -437,12 +437,41 @@ export default {
     
     <script>
       let isCheckingCompare = false;
+
+      // Load saved state on page load
+      document.addEventListener("DOMContentLoaded", () => {
+        const showCompare = sessionStorage.getItem("showCompare");
+        const compareHtml = sessionStorage.getItem("compareHtml");
+        if (showCompare === "true" && compareHtml) {
+          document.getElementById('compare-body').innerHTML = compareHtml;
+          document.getElementById('compare-container').style.display = 'block';
+          document.getElementById('compare-table').style.display = 'table';
+          document.getElementById('btn-compare').innerText = '❌ Tutup Perbandingan';
+          // Tetap pause auto-reload selama perbandingan masih terbuka
+          window.isAutoReloadPaused = true;
+        }
+      });
+
       function loadComparison() {
+        const container = document.getElementById('compare-container');
+        const btn = document.getElementById('btn-compare');
+        
+        // Jika sedang tampil, tombol bertindak sebagai "Tutup"
+        if (container.style.display === 'block' && !isCheckingCompare && btn.innerText.includes('Tutup')) {
+          container.style.display = 'none';
+          btn.innerHTML = '🔄 Cek Perbandingan';
+          sessionStorage.removeItem("showCompare");
+          sessionStorage.removeItem("compareHtml");
+          window.isAutoReloadPaused = false;
+          return;
+        }
+
         if(isCheckingCompare) return;
         isCheckingCompare = true;
-        document.getElementById('compare-container').style.display = 'block';
+        container.style.display = 'block';
         document.getElementById('compare-loading').style.display = 'block';
         document.getElementById('compare-table').style.display = 'none';
+        btn.innerText = '⏳ Memuat...';
         
         // Hentikan auto-reload sementara saat mengecek
         window.isAutoReloadPaused = true;
@@ -472,15 +501,22 @@ export default {
              }
              tbody.innerHTML = html;
              document.getElementById('compare-table').style.display = 'table';
+             btn.innerText = '❌ Tutup Perbandingan';
+             
+             // Simpan ke sessionStorage
+             sessionStorage.setItem("showCompare", "true");
+             sessionStorage.setItem("compareHtml", html);
           } else {
              document.getElementById('compare-container').innerHTML = '<div style="color: var(--danger);">Gagal memuat data: ' + res.error + '</div>';
+             btn.innerText = '🔄 Cek Perbandingan';
           }
           isCheckingCompare = false;
-          // Auto reload dilanjutkan setelah 30 detik dari tombol ditekan
-          setTimeout(() => { window.isAutoReloadPaused = false; }, 30000);
+          // Selama tabel perbandingan terbuka, auto reload di-pause terus
+          window.isAutoReloadPaused = true;
         }).catch(e => {
           document.getElementById('compare-loading').innerText = 'Gagal memuat data perbandingan.';
           isCheckingCompare = false;
+          btn.innerText = '🔄 Cek Perbandingan';
           window.isAutoReloadPaused = false;
         });
       }
