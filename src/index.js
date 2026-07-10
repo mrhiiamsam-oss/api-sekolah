@@ -344,14 +344,19 @@ export default {
         gridEl.scrollTop = parseInt(gridScrollPos);
       }
     });
-    setTimeout(() => {
+    function doAutoReload() {
+      if (window.isAutoReloadPaused) {
+        setTimeout(doAutoReload, 5000);
+        return;
+      }
       sessionStorage.setItem("scrollPos", window.scrollY);
       const gridEl = document.querySelector(".jadwal-grid");
       if (gridEl) {
         sessionStorage.setItem("gridScrollPos", gridEl.scrollTop);
       }
       window.location.reload();
-    }, 5000);
+    }
+    setTimeout(doAutoReload, 5000);
   </script>
 </head>
 <body>
@@ -407,6 +412,79 @@ export default {
       </div>
       ${paginationHtml}
     </div>
+
+    <div style="margin-top: 32px; text-align: left;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px;">
+        <h2 style="font-size: 18px; color: #fff; font-weight: 600; margin: 0;">Perbandingan Data (Belajar.id vs DB)</h2>
+        <button id="btn-compare" style="background: var(--primary); color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; transition: background 0.2s;" onclick="loadComparison()">🔄 Cek Perbandingan</button>
+      </div>
+      <div id="compare-container" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 16px; font-size: 13px; display: none;">
+         <div id="compare-loading" style="color: var(--text-muted); text-align: center; padding: 20px 0;">Sedang memuat data perbandingan dari 39 provinsi... <span class="spin-icon" style="display:inline-block;">🔄</span></div>
+         <table id="compare-table" style="width: 100%; border-collapse: collapse; display: none;">
+           <thead>
+             <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted); text-align: left;">
+               <th style="padding: 8px;">Provinsi</th>
+               <th style="padding: 8px; text-align: center;">Belajar.id</th>
+               <th style="padding: 8px; text-align: center;">Database</th>
+               <th style="padding: 8px; text-align: center;">Selisih</th>
+               <th style="padding: 8px; text-align: center;">Status</th>
+             </tr>
+           </thead>
+           <tbody id="compare-body"></tbody>
+         </table>
+      </div>
+    </div>
+    
+    <script>
+      let isCheckingCompare = false;
+      function loadComparison() {
+        if(isCheckingCompare) return;
+        isCheckingCompare = true;
+        document.getElementById('compare-container').style.display = 'block';
+        document.getElementById('compare-loading').style.display = 'block';
+        document.getElementById('compare-table').style.display = 'none';
+        
+        // Hentikan auto-reload sementara saat mengecek
+        window.isAutoReloadPaused = true;
+        
+        fetch('/api/compare').then(r => r.json()).then(res => {
+          document.getElementById('compare-loading').style.display = 'none';
+          if(res.success) {
+             const tbody = document.getElementById('compare-body');
+             let html = '';
+             let hasDiff = false;
+             res.data.forEach(d => {
+               if(d.selisih !== 0) hasDiff = true;
+               const selisihColor = d.selisih === 0 ? 'var(--success)' : 'var(--danger)';
+               const statusIcon = d.selisih === 0 ? '✅ Sinkron' : '⚠️ Berbeda';
+               html += \`
+                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.02);">
+                   <td style="padding: 8px;">\${d.nama} <div style="font-size: 10px; color: var(--text-muted)">Kode: \${d.kode}</div></td>
+                   <td style="padding: 8px; text-align: center; color: var(--info);">\${d.total_api.toLocaleString('id-ID')}</td>
+                   <td style="padding: 8px; text-align: center; color: var(--primary-light);">\${d.total_db.toLocaleString('id-ID')}</td>
+                   <td style="padding: 8px; text-align: center; color: \${selisihColor}; font-weight: bold;">\${d.selisih > 0 ? '+' : ''}\${d.selisih.toLocaleString('id-ID')}</td>
+                   <td style="padding: 8px; text-align: center; color: \${selisihColor}; font-size: 11px;">\${statusIcon}</td>
+                 </tr>
+               \`;
+             });
+             if(hasDiff) {
+               html += '<tr><td colspan="5" style="padding: 16px; text-align: center;"><div style="color: var(--text-muted); font-size: 12px; margin-bottom: 8px;">Ada data yang berbeda. Smart Sync (GitHub Action) akan otomatis memprioritaskan provinsi yang berselisih saja.</div></td></tr>';
+             }
+             tbody.innerHTML = html;
+             document.getElementById('compare-table').style.display = 'table';
+          } else {
+             document.getElementById('compare-container').innerHTML = '<div style="color: var(--danger);">Gagal memuat data: ' + res.error + '</div>';
+          }
+          isCheckingCompare = false;
+          // Auto reload dilanjutkan setelah 30 detik dari tombol ditekan
+          setTimeout(() => { window.isAutoReloadPaused = false; }, 30000);
+        }).catch(e => {
+          document.getElementById('compare-loading').innerText = 'Gagal memuat data perbandingan.';
+          isCheckingCompare = false;
+          window.isAutoReloadPaused = false;
+        });
+      }
+    </script>
     
     <a href="https://api-sekolah-kita.pages.dev/" class="btn" target="_blank" rel="noopener noreferrer">
       Kunjungi Website Utama
@@ -421,6 +499,61 @@ export default {
         });
       } catch (err) {
         return new Response('Database error: ' + err.message, { status: 500 });
+      }
+    }
+
+    // Endpoint Perbandingan Data (API)
+    if (url.pathname === '/api/compare' && request.method === 'GET') {
+      try {
+        const PROVINCES = {
+            '010000': 'DKI JAKARTA', '020000': 'JAWA BARAT', '030000': 'JAWA TENGAH', '040000': 'DI YOGYAKARTA',
+            '050000': 'JAWA TIMUR', '060000': 'ACEH', '070000': 'SUMATERA UTARA', '080000': 'SUMATERA BARAT',
+            '090000': 'RIAU', '100000': 'JAMBI', '110000': 'SUMATERA SELATAN', '120000': 'LAMPUNG',
+            '130000': 'KALIMANTAN BARAT', '140000': 'KALIMANTAN TENGAH', '150000': 'KALIMANTAN SELATAN',
+            '160000': 'KALIMANTAN TIMUR', '170000': 'SULAWESI UTARA', '180000': 'SULAWESI TENGAH',
+            '190000': 'SULAWESI SELATAN', '200000': 'SULAWESI TENGGARA', '210000': 'MALUKU', '220000': 'BALI',
+            '230000': 'NUSA TENGGARA BARAT', '240000': 'NUSA TENGGARA TIMUR', '250000': 'PAPUA', '260000': 'BENGKULU',
+            '270000': 'MALUKU UTARA', '280000': 'BANTEN', '290000': 'KEPULAUAN BANGKA BELITUNG', '300000': 'GORONTALO',
+            '310000': 'KEPULAUAN RIAU', '320000': 'PAPUA BARAT', '330000': 'SULAWESI BARAT', '340000': 'KALIMANTAN UTARA',
+            '350000': 'LUAR NEGERI', '360000': 'PAPUA TENGAH', '370000': 'PAPUA SELATAN', '380000': 'PAPUA PEGUNUNGAN', 
+            '390000': 'PAPUA BARAT DAYA'
+        };
+
+        const promises = Object.keys(PROVINCES).map(async (kode) => {
+          try {
+            const res = await fetch(`https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kode}?limit=1&offset=0`);
+            const json = await res.json();
+            return { kode, nama: PROVINCES[kode], total_api: json.meta ? json.meta.total : 0 };
+          } catch(e) {
+            return { kode, nama: PROVINCES[kode], total_api: 0 };
+          }
+        });
+        
+        const apiData = await Promise.all(promises);
+
+        // Fetch dari DB
+        const { results: dbRes } = await env.DB.prepare('SELECT provinsi, COUNT(*) as total_db FROM sekolah GROUP BY provinsi').all();
+        
+        const dbMap = {};
+        dbRes.forEach(r => {
+          const cleanedName = r.provinsi.replace(/[^A-Z]/gi, '').toUpperCase();
+          dbMap[cleanedName] = r.total_db;
+        });
+
+        const comparison = apiData.map(d => {
+           const cleanedNama = d.nama.replace(/[^A-Z]/gi, '').toUpperCase();
+           const total_db = dbMap[cleanedNama] || 0;
+           const selisih = d.total_api - total_db;
+           return { ...d, total_db, selisih };
+        });
+        
+        comparison.sort((a, b) => Math.abs(b.selisih) - Math.abs(a.selisih));
+
+        return new Response(JSON.stringify({ success: true, data: comparison }), {
+          headers: { 'content-type': 'application/json' }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500, headers: { 'content-type': 'application/json' } });
       }
     }
 
