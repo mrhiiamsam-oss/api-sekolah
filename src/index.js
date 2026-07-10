@@ -419,21 +419,70 @@ export default {
          }
       }
     });
+    
+    function toggleComparison() {
+      const rows = document.querySelectorAll('.hidden-row');
+      const btn = document.getElementById('btn-compare');
+      let isHidden = true;
+      
+      if (rows.length > 0) {
+        isHidden = rows[0].style.display === 'none';
+        rows.forEach(r => {
+           r.style.display = isHidden ? 'table-row' : 'none';
+        });
+        btn.innerText = isHidden ? 'Tutup Perbandingan' : 'Tampilkan Semua';
+        sessionStorage.setItem('compareShowAll', isHidden ? 'true' : 'false');
+      }
+    }
+
     function doAutoReload() {
       if (window.isAutoReloadPaused) {
         setTimeout(doAutoReload, 5000);
         return;
       }
-      sessionStorage.setItem("scrollPos", window.scrollY);
+      
       const gridEl = document.querySelector(".jadwal-grid");
-      if (gridEl) {
-        sessionStorage.setItem("gridScrollPos", gridEl.scrollTop);
-      }
+      const gridScroll = gridEl ? gridEl.scrollTop : 0;
+      
       const compareEl = document.getElementById("compare-container");
-      if (compareEl) {
-        sessionStorage.setItem("compareScrollPos", compareEl.scrollLeft);
-      }
-      window.location.reload();
+      const compareScroll = compareEl ? compareEl.scrollLeft : 0;
+      
+      const isShowAll = sessionStorage.getItem("compareShowAll") === "true";
+
+      fetch(window.location.href)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          
+          const newCard = doc.querySelector('.card');
+          const currentCard = document.querySelector('.card');
+          
+          if(newCard && currentCard) {
+            currentCard.innerHTML = newCard.innerHTML;
+            
+            // Restore scroll state (no window scroll restore needed since we don't reload)
+            const newGridEl = document.querySelector(".jadwal-grid");
+            if (newGridEl) newGridEl.scrollTop = gridScroll;
+            
+            const newCompareEl = document.getElementById("compare-container");
+            if (newCompareEl) newCompareEl.scrollLeft = compareScroll;
+            
+            // Restore show all state
+            if (isShowAll) {
+               const rows = document.querySelectorAll('.hidden-row');
+               const btn = document.getElementById('btn-compare');
+               if (rows.length > 0 && btn) {
+                  rows.forEach(r => r.style.display = 'table-row');
+                  btn.innerText = 'Tutup Perbandingan';
+               }
+            }
+          }
+          setTimeout(doAutoReload, 5000);
+        })
+        .catch(e => {
+          setTimeout(doAutoReload, 5000);
+        });
     }
     setTimeout(doAutoReload, 5000);
   </script>
@@ -515,23 +564,6 @@ export default {
          </table>
       </div>
     </div>
-    
-    <script>
-      function toggleComparison() {
-        const rows = document.querySelectorAll('.hidden-row');
-        const btn = document.getElementById('btn-compare');
-        let isHidden = true;
-        
-        if (rows.length > 0) {
-          isHidden = rows[0].style.display === 'none';
-          rows.forEach(r => {
-             r.style.display = isHidden ? 'table-row' : 'none';
-          });
-          btn.innerText = isHidden ? 'Tutup Perbandingan' : 'Tampilkan Semua';
-          sessionStorage.setItem('compareShowAll', isHidden ? 'true' : 'false');
-        }
-      }
-    </script>
     
     <a href="https://api-sekolah-kita.pages.dev/" class="btn" target="_blank" rel="noopener noreferrer">
       Kunjungi Website Utama
