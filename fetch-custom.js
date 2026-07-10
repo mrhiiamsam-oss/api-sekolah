@@ -119,25 +119,55 @@ async function fetchCustomData() {
   }
 
   // --- SMART SYNC FILTER ---
+  let skippedProvinces = [];
   try {
     console.log(`Mengambil data perbandingan (Smart Sync) dari ${WORKER_URL}/api/compare...`);
     const compareRes = await fetch(`${WORKER_URL}/api/compare`);
     if (compareRes.ok) {
       const compareJson = await compareRes.json();
       if (compareJson.success && compareJson.data) {
-        // Ambil kode-kode wilayah yang selisihnya tidak nol
+        // Provinsi yang butuh sinkron (selisih != 0)
         const diffCodes = compareJson.data.filter(d => Math.abs(d.selisih) > 0).map(d => d.kode);
+        // Provinsi yang sudah sinkron (selisih == 0)
+        const syncedCodes = compareJson.data.filter(d => d.selisih === 0).map(d => d.kode);
+
+        // Prioritas 1: Provinsi jadwal hari ini yang butuh sinkron
+        const primaryTargets = kodeWilayahList.filter(kode => diffCodes.includes(kode));
         
-        // Iris dengan daftar wilayah yang diminta
-        const filteredList = kodeWilayahList.filter(kode => diffCodes.includes(kode));
-        
-        if (filteredList.length === 0) {
-          console.log(`✅ SEMUA PROVINSI TARGET SUDAH SINKRON. Membatalkan sinkronisasi untuk menghemat resource.`);
-          return;
+        // Catat provinsi jadwal hari ini yang sudah sinkron (untuk UI dashboard)
+        skippedProvinces = kodeWilayahList.filter(kode => syncedCodes.includes(kode));
+
+        // Prioritas 2 (SINKRON CERDAS): Provinsi HARI LAIN yang butuh sinkron
+        const secondaryTargets = diffCodes.filter(kode => !kodeWilayahList.includes(kode));
+
+        // Gabungkan target (hari ini didahulukan, baru hari lain)
+        const finalTargets = [...primaryTargets, ...secondaryTargets];
+
+        if (finalTargets.length === 0) {
+          console.log(`✅ SEMUA PROVINSI SUDAH SINKRON. Tidak ada yang perlu disinkronkan. Membatalkan sinkronisasi untuk menghemat resource.`);
+          kodeWilayahList = [];
+        } else {
+          console.log(`⚠️ Terdapat ${primaryTargets.length} provinsi jadwal hari ini dan ${secondaryTargets.length} provinsi jadwal hari lain yang datanya berbeda.`);
+          console.log(`🚀 Smart Sync akan menyinkronkan total ${finalTargets.length} provinsi secara bertahap (memprioritaskan jadwal hari ini).`);
+          kodeWilayahList = finalTargets;
         }
-        
-        console.log(`⚠️ Dari target, terdapat ${filteredList.length} provinsi yang datanya berbeda. Memulai sinkronisasi...`);
-        kodeWilayahList = filteredList;
+
+        // Tandai provinsi yang di-skip karena sudah sinkron ke database agar mendapat centang hijau di Dashboard
+        if (skippedProvinces.length > 0) {
+          const provNames = skippedProvinces.map(k => k === "350000" ? "LUAR NEGERI" : (PROVINCES[k] || "")).filter(n => n);
+          if (provNames.length > 0) {
+            console.log(`Menandai ${provNames.length} provinsi sebagai sinkron di database (agar UI Dashboard terceklis)...`);
+            try {
+              await fetch(`${WORKER_URL}/mark-synced`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
+                body: JSON.stringify({ provinsiList: provNames })
+              });
+            } catch (err) {
+              console.log(`Gagal memanggil /mark-synced: ${err.message}`);
+            }
+          }
+        }
       } else {
         console.log(`Gagal mem-parsing data Smart Sync. Akan menyinkronkan target secara default.`);
       }
@@ -147,6 +177,8 @@ async function fetchCustomData() {
   } catch (e) {
     console.log(`Error saat mengecek Smart Sync: ${e.message}. Akan menyinkronkan target secara default.`);
   }
+
+  if (kodeWilayahList.length === 0) return;
 
   // Buat daftar antrean task: kombinasi tiap provinsi dan tiap bentuk sekolah
   const tasks = [];

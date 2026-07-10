@@ -757,7 +757,36 @@ export default {
         );
       }
     }
-    
+    // Endpoint untuk menandai provinsi yang sudah sinkron (di-skip oleh Smart Sync)
+    if (url.pathname === '/mark-synced' && request.method === 'POST') {
+      const secret = url.searchParams.get('secret') || request.headers.get('x-cron-secret');
+      if (!env.CRON_SECRET || secret !== env.CRON_SECRET) {
+        return new Response('Unauthorized', { status: 401 });
+      }
+
+      try {
+        const body = await request.json();
+        if (body.provinsiList && Array.isArray(body.provinsiList)) {
+          await env.DB.prepare(`CREATE TABLE IF NOT EXISTS provinsi_sync_status (nama_provinsi TEXT PRIMARY KEY, terakhir_sukses TIMESTAMPTZ)`).run();
+          
+          const stmt = env.DB.prepare(`
+            INSERT INTO provinsi_sync_status (nama_provinsi, terakhir_sukses)
+            VALUES (?, datetime('now', '+7 hours'))
+            ON CONFLICT(nama_provinsi) DO UPDATE SET terakhir_sukses = excluded.terakhir_sukses
+          `);
+          
+          const batch = body.provinsiList.map(p => stmt.bind(p));
+          await env.DB.batch(batch);
+        }
+        return Response.json({ ok: true });
+      } catch (err) {
+        return Response.json(
+          { ok: false, error: err.message },
+          { status: 500, headers: { 'content-type': 'application/json' } }
+        );
+      }
+    }
+
     // Endpoint check state (optional, dipanggil GH Action sebelum start)
     if (url.pathname === '/state' && request.method === 'GET') {
       const { results } = await env.DB.prepare('SELECT bentuk_aktif, offset_terakhir FROM status_sinkronisasi WHERE id = 1').all();
