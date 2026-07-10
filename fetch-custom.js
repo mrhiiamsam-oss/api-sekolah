@@ -131,11 +131,22 @@ async function fetchCustomData() {
         // Provinsi yang sudah sinkron (selisih == 0)
         const syncedCodes = compareJson.data.filter(d => d.selisih === 0).map(d => d.kode);
 
-        // Prioritas 1: Provinsi jadwal hari ini yang butuh sinkron
-        const primaryTargets = kodeWilayahList.filter(kode => diffCodes.includes(kode));
-        
-        // Catat provinsi jadwal hari ini yang sudah sinkron (untuk UI dashboard)
-        skippedProvinces = kodeWilayahList.filter(kode => syncedCodes.includes(kode));
+        // Tentukan apakah minggu ke-2 bulan ini (Tanggal 8-14 WIB) untuk melakukan force update berkala
+        const todayWib = new Date(new Date().getTime() + 7 * 3600 * 1000);
+        const dateOfMonth = todayWib.getUTCDate();
+        const isSecondWeek = dateOfMonth >= 8 && dateOfMonth <= 14;
+
+        let primaryTargets = [];
+        if (isSecondWeek) {
+          console.log(`📅 Deteksi minggu ke-2 bulan ini (Tanggal ${dateOfMonth} WIB). Memaksa update wajib penuh untuk jadwal hari ini.`);
+          primaryTargets = [...kodeWilayahList];
+          skippedProvinces = [];
+        } else {
+          // Prioritas 1: Hanya provinsi jadwal hari ini yang butuh sinkron
+          primaryTargets = kodeWilayahList.filter(kode => diffCodes.includes(kode));
+          // Catat provinsi jadwal hari ini yang sudah sinkron (untuk UI dashboard)
+          skippedProvinces = kodeWilayahList.filter(kode => syncedCodes.includes(kode));
+        }
 
         // Prioritas 2 (SINKRON CERDAS): Provinsi HARI LAIN yang butuh sinkron
         const secondaryTargets = diffCodes.filter(kode => !kodeWilayahList.includes(kode));
