@@ -416,10 +416,8 @@ export default {
     <div style="margin-top: 32px; text-align: left;">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px;">
         <h2 style="font-size: 18px; color: #fff; font-weight: 600; margin: 0;">Perbandingan Data (Belajar.id vs DB)</h2>
-        <button id="btn-compare" style="background: var(--primary); color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; transition: background 0.2s;" onclick="loadComparison()">🔄 Cek Perbandingan</button>
-      </div>
-      <div id="compare-container" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 16px; font-size: 13px; display: none; overflow-x: auto;">
-         <div id="compare-loading" style="color: var(--text-muted); text-align: center; padding: 20px 0;">Sedang memuat data perbandingan dari 39 provinsi... <span class="spin-icon" style="display:inline-block;">🔄</span></div>
+        <button id="btn-compare" style="background: var(--primary); color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; transition: background 0.2s;" onclick="loadComparison()">🔄 Cek Perbandingan</      <div id="compare-container" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 16px; font-size: 13px; display: none; overflow-x: auto;">
+         <div id="compare-loading" style="color: var(--text-muted); text-align: center; padding: 20px 0; display: none;">Sedang memuat data perbandingan dari 39 provinsi... <span class="spin-icon" style="display:inline-block;">🔄</span></div>
          <table id="compare-table" style="width: 100%; min-width: 550px; border-collapse: collapse; display: none;">
            <thead>
              <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted); text-align: left;">
@@ -446,9 +444,8 @@ export default {
           document.getElementById('compare-body').innerHTML = compareHtml;
           document.getElementById('compare-container').style.display = 'block';
           document.getElementById('compare-table').style.display = 'table';
+          document.getElementById('compare-loading').style.display = 'none';
           document.getElementById('btn-compare').innerText = '❌ Tutup Perbandingan';
-          // Tetap pause auto-reload selama perbandingan masih terbuka
-          window.isAutoReloadPaused = true;
         }
       });
 
@@ -473,7 +470,7 @@ export default {
         document.getElementById('compare-table').style.display = 'none';
         btn.innerText = '⏳ Memuat...';
         
-        // Hentikan auto-reload sementara saat mengecek
+        // Hentikan auto-reload HANYA saat melakukan fetch data
         window.isAutoReloadPaused = true;
         
         fetch('/api/compare').then(r => r.json()).then(res => {
@@ -511,10 +508,11 @@ export default {
              btn.innerText = '🔄 Cek Perbandingan';
           }
           isCheckingCompare = false;
-          // Selama tabel perbandingan terbuka, auto reload di-pause terus
-          window.isAutoReloadPaused = true;
+          // Aktifkan kembali auto reload setelah data selesai dimuat
+          window.isAutoReloadPaused = false;
         }).catch(e => {
-          document.getElementById('compare-loading').innerText = 'Gagal memuat data perbandingan.';
+          document.getElementById('compare-loading').style.display = 'none';
+          document.getElementById('compare-container').innerHTML = '<div style="color: var(--danger);">Gagal memuat data.</div>';
           isCheckingCompare = false;
           btn.innerText = '🔄 Cek Perbandingan';
           window.isAutoReloadPaused = false;
