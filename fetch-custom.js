@@ -140,15 +140,26 @@ async function fetchCustomData() {
         // Prioritas 2 (SINKRON CERDAS): Provinsi HARI LAIN yang butuh sinkron
         const secondaryTargets = diffCodes.filter(kode => !kodeWilayahList.includes(kode));
 
-        // Gabungkan target (hari ini didahulukan, baru hari lain)
-        const finalTargets = [...primaryTargets, ...secondaryTargets];
+        // Batasi jumlah maksimal provinsi yang diproses per hari untuk mencegah limit D1 Cloudflare
+        const MAKSIMAL_PROVINSI_PER_HARI = 6;
+        
+        // Ambil dari jadwal hari ini dulu
+        let finalTargets = [...primaryTargets];
+        
+        // Jika jadwal hari ini kurang dari batas maksimal (misal karena sudah banyak yang sinkron), 
+        // kita 'pinjam' provinsi dari hari lain untuk mengisi slot yang kosong.
+        if (finalTargets.length < MAKSIMAL_PROVINSI_PER_HARI) {
+          const sisaSlot = MAKSIMAL_PROVINSI_PER_HARI - finalTargets.length;
+          const tambahan = secondaryTargets.slice(0, sisaSlot);
+          finalTargets = [...finalTargets, ...tambahan];
+        }
 
         if (finalTargets.length === 0) {
           console.log(`✅ SEMUA PROVINSI SUDAH SINKRON. Tidak ada yang perlu disinkronkan. Membatalkan sinkronisasi untuk menghemat resource.`);
           kodeWilayahList = [];
         } else {
           console.log(`⚠️ Terdapat ${primaryTargets.length} provinsi jadwal hari ini dan ${secondaryTargets.length} provinsi jadwal hari lain yang datanya berbeda.`);
-          console.log(`🚀 Smart Sync akan menyinkronkan total ${finalTargets.length} provinsi secara bertahap (memprioritaskan jadwal hari ini).`);
+          console.log(`🚀 Smart Sync akan menyinkronkan total ${finalTargets.length} provinsi (Maksimal ${MAKSIMAL_PROVINSI_PER_HARI} per hari untuk menjaga kuota D1).`);
           kodeWilayahList = finalTargets;
         }
 
