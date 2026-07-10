@@ -192,7 +192,7 @@ export default {
         // Fetch Log Aktivitas
         const pageStr = url.searchParams.get('page') || '1';
         const page = parseInt(pageStr, 10) || 1;
-        const limit = 10;
+        const limit = 5;
         const offset = (page - 1) * limit;
 
         let logAktivitasList = [];
