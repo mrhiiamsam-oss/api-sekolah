@@ -121,8 +121,8 @@ async function fetchCustomData() {
   // --- SMART SYNC FILTER ---
   let skippedProvinces = [];
   try {
-    console.log(`Mengambil data perbandingan (Smart Sync) dari ${WORKER_URL}/api/compare...`);
-    const compareRes = await fetch(`${WORKER_URL}/api/compare`);
+    console.log(`Mengambil data perbandingan (Smart Sync) dari ${WORKER_URL}/api/compare?cron=true...`);
+    const compareRes = await fetch(`${WORKER_URL}/api/compare?cron=true`);
     if (compareRes.ok) {
       const compareJson = await compareRes.json();
       if (compareJson.success && compareJson.data) {
@@ -175,8 +175,9 @@ async function fetchCustomData() {
           console.log(`✅ SEMUA PROVINSI SUDAH SINKRON. Tidak ada yang perlu disinkronkan. Membatalkan sinkronisasi untuk menghemat resource.`);
           kodeWilayahList = [];
         } else {
+          const targetNames = finalTargets.map(k => k === "350000" ? "LUAR NEGERI" : (PROVINCES[k] || k));
           console.log(`⚠️ Terdapat ${primaryTargets.length} provinsi jadwal hari ini dan ${finalTargets.length - primaryTargets.length} provinsi pinjaman jadwal lain yang akan disinkron.`);
-          console.log(`🚀 Smart Sync akan menyinkronkan ${finalTargets.length} provinsi dengan total estimasi ~${totalDataSaatIni.toLocaleString('id-ID')} data (Batas Aman: ${BATAS_AMAN_DATA_PER_HARI.toLocaleString('id-ID')} per hari).`);
+          console.log(`🚀 Smart Sync akan menyinkronkan ${finalTargets.length} provinsi [${targetNames.join(', ')}] dengan total estimasi ~${totalDataSaatIni.toLocaleString('id-ID')} data (Batas Aman: ${BATAS_AMAN_DATA_PER_HARI.toLocaleString('id-ID')} per hari).`);
           kodeWilayahList = finalTargets;
         }
 
@@ -257,6 +258,7 @@ async function fetchCustomData() {
 
     const currentTask = tasks[taskIndex];
     const kodeWilayah = currentTask.prov;
+    const namaWilayah = kodeWilayah === "360" ? "SEMUA" : (PROVINCES[kodeWilayah] || kodeWilayah);
     
     if (kodeWilayah !== previousProv) {
       currentProvinceStarted = false;
@@ -267,7 +269,7 @@ async function fetchCustomData() {
         const totalRes = await fetch(totalUrl);
         const totalJson = await totalRes.json();
         currentTotalEstimasi = totalJson.meta ? totalJson.meta.total : 0;
-        console.log(`📊 Estimasi total data untuk provinsi ${kodeWilayah}: ${currentTotalEstimasi}`);
+        console.log(`📊 Estimasi total data untuk provinsi ${kodeWilayah} (${namaWilayah}): ${currentTotalEstimasi}`);
       } catch (err) {
         console.error(`Gagal mendapatkan estimasi total data:`, err);
         currentTotalEstimasi = 0;
@@ -278,7 +280,7 @@ async function fetchCustomData() {
     const url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=${limit}&offset=${offset}&bentukPendidikan=${bentukAktif}`;
 
     try {
-      console.log(`Mengecek API [${bentukAktif.toUpperCase()}] wilayah ${kodeWilayah} offset ${offset}...`);
+      console.log(`Mengecek API [${bentukAktif.toUpperCase()}] wilayah ${kodeWilayah} (${namaWilayah}) offset ${offset}...`);
       const response = await fetch(url);
       const result = await response.json();
       const dataList = result.data || [];
@@ -286,11 +288,11 @@ async function fetchCustomData() {
       if (dataList.length === 0) {
         offset = 0;
         taskIndex++;
-        console.log(`➡️ Selesai untuk tipe sekolah [${bentukAktif.toUpperCase()}] wilayah ${kodeWilayah}. Pindah ke antrean berikutnya.`);
+        console.log(`➡️ Selesai untuk tipe sekolah [${bentukAktif.toUpperCase()}] wilayah ${kodeWilayah} (${namaWilayah}). Pindah ke antrean berikutnya.`);
         
         const isProvinceFinished = taskIndex >= tasks.length || tasks[taskIndex].prov !== kodeWilayah;
         if (isProvinceFinished) {
-          console.log(`✨ Selesai sinkronisasi seluruh bentuk untuk provinsi ${kodeWilayah}. Melakukan pembersihan...`);
+          console.log(`✨ Selesai sinkronisasi seluruh bentuk untuk provinsi ${kodeWilayah} (${namaWilayah}). Melakukan pembersihan...`);
           const provNameDB = kodeWilayah === "360" ? "SEMUA" : PROVINCES[kodeWilayah];
           try {
             const { stats } = await postBatchToWorker([], 'tk', 0, true, {
