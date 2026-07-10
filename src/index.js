@@ -532,7 +532,7 @@ export default {
         const apiData = await Promise.all(promises);
 
         // Fetch dari DB
-        const { results: dbRes } = await env.DB.prepare('SELECT provinsi, COUNT(*) as total_db FROM sekolah GROUP BY provinsi').all();
+        const { results: dbRes } = await env.DB.prepare('SELECT nama_provinsi as provinsi, COUNT(*) as total_db FROM sekolah GROUP BY nama_provinsi').all();
         
         const dbMap = {};
         dbRes.forEach(r => {
