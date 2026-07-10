@@ -418,9 +418,9 @@ export default {
         <h2 style="font-size: 18px; color: #fff; font-weight: 600; margin: 0;">Perbandingan Data (Belajar.id vs DB)</h2>
         <button id="btn-compare" style="background: var(--primary); color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; transition: background 0.2s;" onclick="loadComparison()">🔄 Cek Perbandingan</button>
       </div>
-      <div id="compare-container" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 16px; font-size: 13px; display: none;">
+      <div id="compare-container" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 16px; font-size: 13px; display: none; overflow-x: auto;">
          <div id="compare-loading" style="color: var(--text-muted); text-align: center; padding: 20px 0;">Sedang memuat data perbandingan dari 39 provinsi... <span class="spin-icon" style="display:inline-block;">🔄</span></div>
-         <table id="compare-table" style="width: 100%; border-collapse: collapse; display: none;">
+         <table id="compare-table" style="width: 100%; min-width: 550px; border-collapse: collapse; display: none;">
            <thead>
              <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted); text-align: left;">
                <th style="padding: 8px;">Provinsi</th>
