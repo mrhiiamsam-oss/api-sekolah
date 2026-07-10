@@ -192,7 +192,7 @@ export default {
         // Fetch Log Aktivitas
         let logAktivitasList = [];
         try {
-          const { results: logRes } = await env.DB.prepare('SELECT * FROM log_aktivitas_provinsi ORDER BY waktu_selesai DESC LIMIT 5').all();
+          const { results: logRes } = await env.DB.prepare('SELECT * FROM log_aktivitas_provinsi ORDER BY waktu_selesai DESC LIMIT 20').all();
           logAktivitasList = logRes || [];
         } catch (e) {} // Abaikan jika tabel belum ada
         
