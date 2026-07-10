@@ -133,6 +133,12 @@ export default {
               sumTotalDb += d.total_db || 0;
               if (d.selisih !== 0) diffCount++;
            });
+           compareCache.value.sort((a, b) => {
+              const aDiff = a.selisih !== 0 ? 1 : 0;
+              const bDiff = b.selisih !== 0 ? 1 : 0;
+              if (aDiff !== bDiff) return bDiff - aDiff;
+              return a.nama.localeCompare(b.nama);
+           });
            
            compareHtml = compareCache.value.map((d, idx) => {
               const selisihColor = d.selisih === 0 ? 'var(--success)' : 'var(--danger)';
@@ -699,7 +705,12 @@ export default {
            return { ...d, total_db, selisih };
         });
         
-        comparison.sort((a, b) => Math.abs(b.selisih) - Math.abs(a.selisih));
+        comparison.sort((a, b) => {
+           const aDiff = a.selisih !== 0 ? 1 : 0;
+           const bDiff = b.selisih !== 0 ? 1 : 0;
+           if (aDiff !== bDiff) return bDiff - aDiff;
+           return a.nama.localeCompare(b.nama);
+        });
         
         const jsonResult = JSON.stringify(comparison);
         
