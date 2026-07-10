@@ -25,9 +25,15 @@ export default {
         `).all();
         
         let provStatusList = [];
+        let compareCache = null;
         try {
           const { results: provRes } = await env.DB.prepare('SELECT nama_provinsi, terakhir_sukses FROM provinsi_sync_status').all();
           provStatusList = provRes || [];
+          
+          const { results: cacheRes } = await env.DB.prepare('SELECT value, updated_at FROM cache_data WHERE key = ?').bind('perbandingan').all();
+          if (cacheRes && cacheRes.length > 0) {
+             compareCache = { value: JSON.parse(cacheRes[0].value), updated_at: cacheRes[0].updated_at };
+          }
         } catch (e) {} // Abaikan jika tabel belum ada
         
         let row1 = results?.find(r => r.id === 1) || { bentuk_aktif: 'tk', offset_terakhir: 0 };
@@ -108,6 +114,40 @@ export default {
            provSyncMap[p.nama_provinsi] = new Date(p.terakhir_sukses.replace(' ', 'T') + '+07:00').getTime();
         });
 
+        const compareMap = {};
+        let compareHtml = '';
+        let hasDiffGlobal = false;
+        let lastChecked = 'Belum ada data';
+        
+        if (compareCache) {
+           lastChecked = compareCache.updated_at + ' WIB';
+           compareCache.value.forEach(d => {
+              compareMap[d.nama.replace(/[^A-Z]/g, '')] = d.selisih;
+              if (d.selisih !== 0) hasDiffGlobal = true;
+           });
+           
+           compareHtml = compareCache.value.map((d, idx) => {
+              const selisihColor = d.selisih === 0 ? 'var(--success)' : 'var(--danger)';
+              const statusIcon = d.selisih === 0 ? '✅ Sinkron' : '⚠️ Berbeda';
+              const displayStyle = idx >= 5 ? 'display: none;' : '';
+              const trClass = idx >= 5 ? 'hidden-row' : '';
+              return `
+                <tr class="${trClass}" style="border-bottom: 1px solid rgba(255,255,255,0.02); ${displayStyle}">
+                  <td style="padding: 8px;">${d.nama} <div style="font-size: 10px; color: var(--text-muted)">Kode: ${d.kode}</div></td>
+                  <td style="padding: 8px; text-align: center; color: var(--info);">${d.total_api.toLocaleString('id-ID')}</td>
+                  <td style="padding: 8px; text-align: center; color: var(--primary-light);">${d.total_db.toLocaleString('id-ID')}</td>
+                  <td style="padding: 8px; text-align: center; color: ${selisihColor}; font-weight: bold;">${d.selisih > 0 ? '+' : ''}${d.selisih.toLocaleString('id-ID')}</td>
+                  <td style="padding: 8px; text-align: center; color: ${selisihColor}; font-size: 11px;">${statusIcon}</td>
+                </tr>
+              `;
+           }).join('');
+           if(hasDiffGlobal) {
+             compareHtml += '<tr class="hidden-row" style="display: none;"><td colspan="5" style="padding: 16px; text-align: center;"><div style="color: var(--text-muted); font-size: 12px; margin-bottom: 8px;">Ada data yang berbeda. Smart Sync (GitHub Action) akan otomatis memprioritaskan provinsi yang berselisih saja.</div></td></tr>';
+           }
+        } else {
+           compareHtml = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted);">Belum ada data perbandingan. Jalankan cron terlebih dahulu.</td></tr>';
+        }
+
         let jadwalHtml = '<div class="jadwal-container"><h2>Jadwal Sinkronisasi Mingguan (00:00 WIB)</h2><div class="jadwal-grid">';
         jadwal.forEach(j => {
           const jIndex = j.id === 0 ? 7 : j.id;
@@ -146,30 +186,26 @@ export default {
             const isCompleted = lastSyncTime >= targetTime;
             const isActiveButNotRunning = !isRunning && activeRow.bentuk_aktif && cleanName(activeRow.bentuk_aktif).includes(cleanName(prov));
 
-            if (isPast || isToday) {
-              if (isCurrentlyRunning) {
-                statusIcon = '<span class="spin-icon">🔄</span>';
-                statusText = 'Proses';
-                itemClass = 'prov-item processing';
-              } else if (isCompleted) {
-                statusIcon = '✅';
-                statusText = 'Selesai';
-                itemClass = 'prov-item done';
-              } else if (isActiveButNotRunning) {
-                statusIcon = '⚠️';
-                statusText = 'Terhenti / Menunggu';
-                itemClass = 'prov-item waiting';
-              } else {
-                if (isPast) {
-                  statusIcon = '❌';
-                  statusText = 'Terlewat / Gagal';
-                  itemClass = 'prov-item waiting';
-                } else {
-                  statusIcon = '🕒';
-                  statusText = 'Menunggu';
-                  itemClass = 'prov-item waiting';
-                }
-              }
+            // Logika baru: Ikuti status sinkron database (selisih == 0) untuk SEMUA hari
+            const isSynced = compareMap[cleanName(prov)] === 0;
+            const hasData = compareMap[cleanName(prov)] !== undefined;
+            
+            if (isCurrentlyRunning) {
+              statusIcon = '<span class="spin-icon">🔄</span>';
+              statusText = 'Proses Sinkronisasi';
+              itemClass = 'prov-item processing';
+            } else if (hasData && isSynced) {
+              statusIcon = '✅';
+              statusText = 'Sudah Sinkron';
+              itemClass = 'prov-item done';
+            } else if (isActiveButNotRunning) {
+              statusIcon = '⚠️';
+              statusText = 'Terhenti / Menunggu';
+              itemClass = 'prov-item waiting';
+            } else {
+              statusIcon = '🕒';
+              statusText = 'Menunggu Sinkronisasi';
+              itemClass = 'prov-item waiting';
             }
             
             return `<div class="${itemClass}">
@@ -419,12 +455,14 @@ export default {
 
     <div style="margin-top: 32px; text-align: left;">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px;">
-        <h2 style="font-size: 18px; color: #fff; font-weight: 600; margin: 0;">Perbandingan Data (Belajar.id vs DB)</h2>
-        <button id="btn-compare" style="background: var(--primary); color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; transition: background 0.2s;" onclick="loadComparison()">🔄 Cek Perbandingan</button>
+        <div>
+          <h2 style="font-size: 18px; color: #fff; font-weight: 600; margin: 0 0 4px 0;">Perbandingan Data (Belajar.id vs DB)</h2>
+          <div style="font-size: 12px; color: var(--text-muted);">Terakhir dicek: ${lastChecked}</div>
+        </div>
+        ${compareCache && compareCache.value.length > 5 ? `<button id="btn-compare" style="background: var(--primary); color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; transition: background 0.2s;" onclick="toggleComparison()">Tampilkan Semua</button>` : ''}
       </div>
-      <div id="compare-container" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 16px; font-size: 13px; display: none; overflow-x: auto;">
-         <div id="compare-loading" style="color: var(--text-muted); text-align: center; padding: 20px 0; display: none;">Sedang memuat data perbandingan dari 39 provinsi... <span class="spin-icon" style="display:inline-block;">🔄</span></div>
-         <table id="compare-table" style="width: 100%; min-width: 550px; border-collapse: collapse; display: none;">
+      <div id="compare-container" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 16px; font-size: 13px; overflow-x: auto;">
+         <table id="compare-table" style="width: 100%; min-width: 550px; border-collapse: collapse;">
            <thead>
              <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted); text-align: left;">
                <th style="padding: 8px;">Provinsi</th>
@@ -434,100 +472,24 @@ export default {
                <th style="padding: 8px; text-align: center;">Status</th>
              </tr>
            </thead>
-           <tbody id="compare-body"></tbody>
+           <tbody id="compare-body">${compareHtml}</tbody>
          </table>
       </div>
     </div>
     
     <script>
-      let isCheckingCompare = false;
-
-      // Load saved state on page load
-      document.addEventListener("DOMContentLoaded", () => {
-        const showCompare = sessionStorage.getItem("showCompare");
-        const compareHtml = sessionStorage.getItem("compareHtml");
-        if (showCompare === "true" && compareHtml) {
-          document.getElementById('compare-body').innerHTML = compareHtml;
-          document.getElementById('compare-container').style.display = 'block';
-          document.getElementById('compare-table').style.display = 'table';
-          document.getElementById('compare-loading').style.display = 'none';
-          document.getElementById('btn-compare').innerText = '❌ Tutup Perbandingan';
-          
-          const compareScrollPos = sessionStorage.getItem("compareScrollPos");
-          if (compareScrollPos) {
-            document.getElementById('compare-container').scrollLeft = parseInt(compareScrollPos);
-          }
-        }
-      });
-
-      function loadComparison() {
-        const container = document.getElementById('compare-container');
+      function toggleComparison() {
+        const rows = document.querySelectorAll('.hidden-row');
         const btn = document.getElementById('btn-compare');
+        let isHidden = true;
         
-        // Jika sedang tampil, tombol bertindak sebagai "Tutup"
-        if (container.style.display === 'block' && !isCheckingCompare && btn.innerText.includes('Tutup')) {
-          container.style.display = 'none';
-          btn.innerHTML = '🔄 Cek Perbandingan';
-          sessionStorage.removeItem("showCompare");
-          sessionStorage.removeItem("compareHtml");
-          window.isAutoReloadPaused = false;
-          return;
+        if (rows.length > 0) {
+          isHidden = rows[0].style.display === 'none';
+          rows.forEach(r => {
+             r.style.display = isHidden ? 'table-row' : 'none';
+          });
+          btn.innerText = isHidden ? 'Tutup Perbandingan' : 'Tampilkan Semua';
         }
-
-        if(isCheckingCompare) return;
-        isCheckingCompare = true;
-        container.style.display = 'block';
-        document.getElementById('compare-loading').style.display = 'block';
-        document.getElementById('compare-table').style.display = 'none';
-        btn.innerText = '⏳ Memuat...';
-        
-        // Hentikan auto-reload HANYA saat melakukan fetch data
-        window.isAutoReloadPaused = true;
-        
-        fetch('/api/compare').then(r => r.json()).then(res => {
-          document.getElementById('compare-loading').style.display = 'none';
-          if(res.success) {
-             const tbody = document.getElementById('compare-body');
-             let html = '';
-             let hasDiff = false;
-             res.data.forEach(d => {
-               if(d.selisih !== 0) hasDiff = true;
-               const selisihColor = d.selisih === 0 ? 'var(--success)' : 'var(--danger)';
-               const statusIcon = d.selisih === 0 ? '✅ Sinkron' : '⚠️ Berbeda';
-               html += \`
-                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.02);">
-                   <td style="padding: 8px;">\${d.nama} <div style="font-size: 10px; color: var(--text-muted)">Kode: \${d.kode}</div></td>
-                   <td style="padding: 8px; text-align: center; color: var(--info);">\${d.total_api.toLocaleString('id-ID')}</td>
-                   <td style="padding: 8px; text-align: center; color: var(--primary-light);">\${d.total_db.toLocaleString('id-ID')}</td>
-                   <td style="padding: 8px; text-align: center; color: \${selisihColor}; font-weight: bold;">\${d.selisih > 0 ? '+' : ''}\${d.selisih.toLocaleString('id-ID')}</td>
-                   <td style="padding: 8px; text-align: center; color: \${selisihColor}; font-size: 11px;">\${statusIcon}</td>
-                 </tr>
-               \`;
-             });
-             if(hasDiff) {
-               html += '<tr><td colspan="5" style="padding: 16px; text-align: center;"><div style="color: var(--text-muted); font-size: 12px; margin-bottom: 8px;">Ada data yang berbeda. Smart Sync (GitHub Action) akan otomatis memprioritaskan provinsi yang berselisih saja.</div></td></tr>';
-             }
-             tbody.innerHTML = html;
-             document.getElementById('compare-table').style.display = 'table';
-             btn.innerText = '❌ Tutup Perbandingan';
-             
-             // Simpan ke sessionStorage
-             sessionStorage.setItem("showCompare", "true");
-             sessionStorage.setItem("compareHtml", html);
-          } else {
-             document.getElementById('compare-container').innerHTML = '<div style="color: var(--danger);">Gagal memuat data: ' + res.error + '</div>';
-             btn.innerText = '🔄 Cek Perbandingan';
-          }
-          isCheckingCompare = false;
-          // Aktifkan kembali auto reload setelah data selesai dimuat
-          window.isAutoReloadPaused = false;
-        }).catch(e => {
-          document.getElementById('compare-loading').style.display = 'none';
-          document.getElementById('compare-container').innerHTML = '<div style="color: var(--danger);">Gagal memuat data.</div>';
-          isCheckingCompare = false;
-          btn.innerText = '🔄 Cek Perbandingan';
-          window.isAutoReloadPaused = false;
-        });
       }
     </script>
     
@@ -550,6 +512,21 @@ export default {
     // Endpoint Perbandingan Data (API)
     if (url.pathname === '/api/compare' && request.method === 'GET') {
       try {
+        const isCron = url.searchParams.get('cron') === 'true';
+        
+        // Buat tabel cache_data jika belum ada
+        await env.DB.prepare(`CREATE TABLE IF NOT EXISTS cache_data (key TEXT PRIMARY KEY, value TEXT, updated_at TIMESTAMPTZ)`).run();
+
+        if (!isCron) {
+           const { results } = await env.DB.prepare("SELECT value FROM cache_data WHERE key = 'perbandingan'").all();
+           if (results && results.length > 0) {
+              return new Response(JSON.stringify({ success: true, data: JSON.parse(results[0].value) }), {
+                headers: { 'content-type': 'application/json' }
+              });
+           }
+           // Jika kosong, lanjut ambil data dari API untuk inisialisasi awal
+        }
+
         const PROVINCES = {
             '010000': 'DKI JAKARTA', '020000': 'JAWA BARAT', '030000': 'JAWA TENGAH', '040000': 'DI YOGYAKARTA',
             '050000': 'JAWA TIMUR', '060000': 'ACEH', '070000': 'SUMATERA UTARA', '080000': 'SUMATERA BARAT',
@@ -597,6 +574,15 @@ export default {
         });
         
         comparison.sort((a, b) => Math.abs(b.selisih) - Math.abs(a.selisih));
+        
+        const jsonResult = JSON.stringify(comparison);
+        
+        // Simpan ke cache
+        await env.DB.prepare(`
+          INSERT INTO cache_data (key, value, updated_at) 
+          VALUES ('perbandingan', ?, datetime('now', '+7 hours'))
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        `).bind(jsonResult).run();
 
         return new Response(JSON.stringify({ success: true, data: comparison }), {
           headers: { 'content-type': 'application/json' }
