@@ -186,7 +186,7 @@ export default {
           compareHtml = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted);">Belum ada data perbandingan. Jalankan cron terlebih dahulu.</td></tr>';
         }
 
-        let jadwalHtml = '<div class="jadwal-container"><h2>Jadwal Sinkronisasi Harian (01:30 WITA)</h2><div class="jadwal-grid">';
+        let jadwalHtml = '<div class="jadwal-container"><h2>Jadwal Sinkronisasi Harian (00:30 WIB)</h2><div class="jadwal-grid">';
         jadwal.forEach(j => {
           const jIndex = j.id === 0 ? 7 : j.id;
 
