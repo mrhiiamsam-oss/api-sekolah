@@ -89,11 +89,11 @@ export default {
         // Data Jadwal Sinkronisasi Mingguan per Provinsi (sesuai jalankan-skrip.yml)
         const jadwal = [
           { hari: 'Senin', id: 1, provs: ['JAWA BARAT', 'BALI', 'BENGKULU', 'GORONTALO', 'SULAWESI BARAT'] },
-          { hari: 'Selasa', id: 2, provs: ['JAWA TIMUR', 'DI YOGYAKARTA', 'KEPULAUAN BANGKA BELITUNG', 'KALIMANTAN UTARA', 'MALUKU UTARA'] },
+          { hari: 'Selasa', id: 2, provs: ['JAWA TIMUR', 'KEPULAUAN BANGKA BELITUNG', 'KALIMANTAN UTARA'] },
           { hari: 'Rabu', id: 3, provs: ['JAWA TENGAH', 'BANTEN', 'KEPULAUAN RIAU', 'PAPUA BARAT', 'PAPUA BARAT DAYA'] },
           { hari: 'Kamis', id: 4, provs: ['SUMATERA UTARA', 'DKI JAKARTA', 'ACEH', 'JAMBI', 'PAPUA', 'PAPUA SELATAN'] },
           { hari: 'Jumat', id: 5, provs: ['SUMATERA SELATAN', 'LAMPUNG', 'RIAU', 'SUMATERA BARAT', 'PAPUA TENGAH', 'PAPUA PEGUNUNGAN'] },
-          { hari: 'Sabtu', id: 6, provs: ['SULAWESI SELATAN', 'SULAWESI TENGGARA', 'SULAWESI TENGAH', 'SULAWESI UTARA', 'KALIMANTAN TIMUR', 'MALUKU'] },
+          { hari: 'Sabtu', id: 6, provs: ['SULAWESI SELATAN', 'SULAWESI TENGGARA', 'SULAWESI TENGAH', 'SULAWESI UTARA', 'KALIMANTAN TIMUR', 'MALUKU', 'DI YOGYAKARTA', 'MALUKU UTARA'] },
           { hari: 'Minggu', id: 0, provs: ['KALIMANTAN BARAT', 'KALIMANTAN SELATAN', 'KALIMANTAN TENGAH', 'NUSA TENGGARA TIMUR', 'NUSA TENGGARA BARAT', 'LUAR NEGERI'] }
         ];
 
@@ -108,6 +108,17 @@ export default {
         // Dapatkan representasi tanggal jam 00:00 di WIB untuk kalkulasi offset hari
         const today00Utc = Date.UTC(dateWIB.getUTCFullYear(), dateWIB.getUTCMonth(), dateWIB.getUTCDate());
         const today00WibAbsoluteMs = today00Utc - (7 * 60 * 60 * 1000); // Absolute timestamp 00:00 WIB hari ini
+        
+        const dateOfMonth = dateWIB.getUTCDate();
+        const isSecondWeek = dateOfMonth >= 8 && dateOfMonth <= 14;
+        
+        const secondWeekNoticeHtml = isSecondWeek 
+          ? `<div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.18); padding: 12px 16px; border-radius: 12px; font-size: 13px; color: #f59e0b; margin-top: 16px; text-align: left; line-height: 1.5; font-weight: 500;">
+              📅 <strong>Minggu Ke-2 Aktif (Tgl ${dateOfMonth} WIB):</strong> Mode Update Wajib Penuh aktif. Provinsi terjadwal hari ini akan disinkronkan secara total tanpa dilewati.
+             </div>`
+          : `<div style="background: rgba(34, 197, 94, 0.04); border: 1px solid rgba(34, 197, 94, 0.12); padding: 12px 16px; border-radius: 12px; font-size: 13px; color: var(--success); margin-top: 16px; text-align: left; line-height: 1.5; font-weight: 500;">
+              ⚡️ <strong>Mode Smart Sync Aktif:</strong> Provinsi terjadwal hari ini yang sudah sinkron (selisih 0) akan dilewati otomatis. Update wajib berikutnya pada tanggal 8-14.
+             </div>`;
         
         const provSyncMap = {};
         provStatusList.forEach(p => {
@@ -563,6 +574,7 @@ export default {
         <span>${progressPercent}% Selesai</span>
         <span>Data: ${totalSynced} / ${totalEstimasi}</span>
       </div>
+      ${secondWeekNoticeHtml}
     </div>
     
     <h1 id="main-title">Sekolah Sync Dashboard ${isCustom ? '<span style="color: #f59e0b; font-size: 14px; vertical-align: middle; background: rgba(245, 158, 11, 0.15); padding: 4px 10px; border-radius: 20px;">Custom</span>' : '<span style="color: var(--primary-light); font-size: 14px; vertical-align: middle; background: rgba(99, 102, 241, 0.15); padding: 4px 10px; border-radius: 20px;">Full</span>'}</h1>
