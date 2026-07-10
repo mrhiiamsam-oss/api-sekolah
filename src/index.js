@@ -354,6 +354,10 @@ export default {
       if (gridEl) {
         sessionStorage.setItem("gridScrollPos", gridEl.scrollTop);
       }
+      const compareEl = document.getElementById("compare-container");
+      if (compareEl) {
+        sessionStorage.setItem("compareScrollPos", compareEl.scrollLeft);
+      }
       window.location.reload();
     }
     setTimeout(doAutoReload, 5000);
@@ -448,6 +452,11 @@ export default {
           document.getElementById('compare-table').style.display = 'table';
           document.getElementById('compare-loading').style.display = 'none';
           document.getElementById('btn-compare').innerText = '❌ Tutup Perbandingan';
+          
+          const compareScrollPos = sessionStorage.getItem("compareScrollPos");
+          if (compareScrollPos) {
+            document.getElementById('compare-container').scrollLeft = parseInt(compareScrollPos);
+          }
         }
       });
 
