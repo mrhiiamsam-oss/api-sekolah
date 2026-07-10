@@ -401,6 +401,13 @@ export default {
         gridEl.scrollTop = parseInt(gridScrollPos);
       }
       
+      // Restore compare horizontal scroll
+      const compareScrollPos = sessionStorage.getItem("compareScrollPos");
+      const compareEl = document.getElementById("compare-container");
+      if (compareScrollPos && compareEl) {
+        compareEl.scrollLeft = parseInt(compareScrollPos);
+      }
+      
       // Restore show all compare
       const showAll = sessionStorage.getItem("compareShowAll");
       if (showAll === "true") {
