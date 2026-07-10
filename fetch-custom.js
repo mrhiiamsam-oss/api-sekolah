@@ -291,7 +291,7 @@ async function fetchCustomData() {
         console.log(`➡️ Selesai untuk tipe sekolah [${bentukAktif.toUpperCase()}] wilayah ${kodeWilayah} (${namaWilayah}). Pindah ke antrean berikutnya.`);
         
         const isProvinceFinished = taskIndex >= tasks.length || tasks[taskIndex].prov !== kodeWilayah;
-        if (isProvinceFinished) {
+         if (isProvinceFinished) {
           console.log(`✨ Selesai sinkronisasi seluruh bentuk untuk provinsi ${kodeWilayah} (${namaWilayah}). Melakukan pembersihan...`);
           const provNameDB = kodeWilayah === "360" ? "SEMUA" : PROVINCES[kodeWilayah];
           try {
@@ -301,6 +301,18 @@ async function fetchCustomData() {
               waktuMulai: waktuMulai
             });
             console.log(`🧹 Berhasil membersihkan data lama untuk ${provNameDB}. ${stats?.dihapus || 0} sekolah dihapus dan aktivitas dicatat.`);
+            
+            console.log(`🔄 Memperbarui cache Perbandingan Data (Belajar.id vs DB) untuk ${provNameDB}...`);
+            try {
+              const cmpRes = await fetch(`${WORKER_URL}/api/compare?cron=true`);
+              if (cmpRes.ok) {
+                console.log(`✅ Berhasil memperbarui cache Perbandingan Data.`);
+              } else {
+                console.log(`⚠️ Gagal memperbarui cache Perbandingan Data: ${cmpRes.statusText}`);
+              }
+            } catch (e) {
+              console.log(`⚠️ Gagal memperbarui cache Perbandingan Data: ${e.message}`);
+            }
           } catch (e) {
             console.error(`Gagal membersihkan data lama untuk ${provNameDB}:`, e);
           }

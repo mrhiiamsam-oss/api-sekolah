@@ -381,7 +381,7 @@ export default {
     .prov-list { display: flex; flex-direction: column; gap: 8px; }
     .prov-item { display: flex; justify-content: space-between; align-items: center; font-size: 13px; background: rgba(0,0,0,0.25); padding: 8px 12px; border-radius: 8px; transition: background 0.2s; }
     .prov-item.done { background: rgba(34, 197, 94, 0.1); }
-    .prov-item.processing { background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.3); }
+    .prov-item.processing { background: rgba(249, 115, 22, 0.2); border: 1px solid rgba(249, 115, 22, 0.35); }
     .prov-name { color: #e5e7eb; font-weight: 500; }
     .prov-item.done .prov-name { color: var(--text-muted); }
     .spin-icon { display: inline-block; animation: rotation 2s linear infinite; }
