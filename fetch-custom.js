@@ -140,26 +140,43 @@ async function fetchCustomData() {
         // Prioritas 2 (SINKRON CERDAS): Provinsi HARI LAIN yang butuh sinkron
         const secondaryTargets = diffCodes.filter(kode => !kodeWilayahList.includes(kode));
 
-        // Batasi jumlah maksimal provinsi yang diproses per hari untuk mencegah limit D1 Cloudflare
-        const MAKSIMAL_PROVINSI_PER_HARI = 6;
+        // Batasi berdasarkan JUMLAH DATA (bukan sekadar jumlah provinsi) untuk mencegah limit D1 Cloudflare.
+        // Kuota aman penulisan baris per hari untuk Cloudflare D1 Free (Limit ~100k write/hari).
+        const BATAS_AMAN_DATA_PER_HARI = 70000; 
         
-        // Ambil dari jadwal hari ini dulu
-        let finalTargets = [...primaryTargets];
-        
-        // Jika jadwal hari ini kurang dari batas maksimal (misal karena sudah banyak yang sinkron), 
-        // kita 'pinjam' provinsi dari hari lain untuk mengisi slot yang kosong.
-        if (finalTargets.length < MAKSIMAL_PROVINSI_PER_HARI) {
-          const sisaSlot = MAKSIMAL_PROVINSI_PER_HARI - finalTargets.length;
-          const tambahan = secondaryTargets.slice(0, sisaSlot);
-          finalTargets = [...finalTargets, ...tambahan];
+        let totalDataSaatIni = 0;
+        let finalTargets = [];
+
+        // Fungsi pembantu untuk mencari estimasi total data provinsi
+        const getTotalApi = (kode) => {
+          const p = compareJson.data.find(d => d.kode === kode);
+          return p ? p.total_api : 0;
+        };
+
+        // 1. Masukkan semua target jadwal hari ini terlebih dahulu (Prioritas Utama)
+        for (const kode of primaryTargets) {
+          finalTargets.push(kode);
+          totalDataSaatIni += getTotalApi(kode);
+        }
+
+        // 2. SINKRON CERDAS: Jika kuota data harian masih tersisa, 'pinjam' dari hari lain 
+        // yang muat dimasukkan ke dalam sisa kuota.
+        if (totalDataSaatIni < BATAS_AMAN_DATA_PER_HARI) {
+          for (const kode of secondaryTargets) {
+            const estimasiData = getTotalApi(kode);
+            if (totalDataSaatIni + estimasiData <= BATAS_AMAN_DATA_PER_HARI) {
+              finalTargets.push(kode);
+              totalDataSaatIni += estimasiData;
+            }
+          }
         }
 
         if (finalTargets.length === 0) {
           console.log(`✅ SEMUA PROVINSI SUDAH SINKRON. Tidak ada yang perlu disinkronkan. Membatalkan sinkronisasi untuk menghemat resource.`);
           kodeWilayahList = [];
         } else {
-          console.log(`⚠️ Terdapat ${primaryTargets.length} provinsi jadwal hari ini dan ${secondaryTargets.length} provinsi jadwal hari lain yang datanya berbeda.`);
-          console.log(`🚀 Smart Sync akan menyinkronkan total ${finalTargets.length} provinsi (Maksimal ${MAKSIMAL_PROVINSI_PER_HARI} per hari untuk menjaga kuota D1).`);
+          console.log(`⚠️ Terdapat ${primaryTargets.length} provinsi jadwal hari ini dan ${finalTargets.length - primaryTargets.length} provinsi pinjaman jadwal lain yang akan disinkron.`);
+          console.log(`🚀 Smart Sync akan menyinkronkan ${finalTargets.length} provinsi dengan total estimasi ~${totalDataSaatIni.toLocaleString('id-ID')} data (Batas Aman: ${BATAS_AMAN_DATA_PER_HARI.toLocaleString('id-ID')} per hari).`);
           kodeWilayahList = finalTargets;
         }
 
