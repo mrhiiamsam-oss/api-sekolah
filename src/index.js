@@ -458,15 +458,54 @@ export default {
           const newCard = doc.querySelector('.card');
           const currentCard = document.querySelector('.card');
           
-          if(newCard && currentCard) {
-            currentCard.innerHTML = newCard.innerHTML;
+          if(doc) {
+            // Update specific elements to prevent full DOM recreation and scroll interruption
             
-            // Restore scroll state (no window scroll restore needed since we don't reload)
-            const newGridEl = document.querySelector(".jadwal-grid");
-            if (newGridEl) newGridEl.scrollTop = gridScroll;
+            const statusBadge = document.getElementById('status');
+            const newStatusBadge = doc.getElementById('status');
+            if (statusBadge && newStatusBadge) { statusBadge.className = newStatusBadge.className; statusBadge.innerHTML = newStatusBadge.innerHTML; }
             
-            const newCompareEl = document.getElementById("compare-container");
-            if (newCompareEl) newCompareEl.scrollLeft = compareScroll;
+            const progBar = document.querySelector('.progress-bar');
+            const newProgBar = doc.querySelector('.progress-bar');
+            if (progBar && newProgBar) progBar.innerHTML = newProgBar.innerHTML;
+            
+            const progStats = document.getElementById('progress-stats');
+            const newProgStats = doc.getElementById('progress-stats');
+            if (progStats && newProgStats) progStats.innerHTML = newProgStats.innerHTML;
+            
+            const grid = document.querySelector('.grid');
+            const newGrid = doc.querySelector('.grid');
+            if (grid && newGrid) grid.innerHTML = newGrid.innerHTML;
+            
+            const jadwalGrid = document.querySelector('.jadwal-grid');
+            const newJadwalGrid = doc.querySelector('.jadwal-grid');
+            if (jadwalGrid && newJadwalGrid) {
+              const currentScroll = jadwalGrid.scrollTop;
+              jadwalGrid.innerHTML = newJadwalGrid.innerHTML;
+              jadwalGrid.scrollTop = currentScroll;
+            }
+            
+            const logContainer = document.getElementById('log-container');
+            const newLogContainer = doc.getElementById('log-container');
+            if (logContainer && newLogContainer) logContainer.innerHTML = newLogContainer.innerHTML;
+            
+            const compareBody = document.getElementById('compare-body');
+            const newCompareBody = doc.getElementById('compare-body');
+            if (compareBody && newCompareBody) {
+              compareBody.innerHTML = newCompareBody.innerHTML;
+            }
+            
+            const lastChecked = document.getElementById('compare-last-checked');
+            const newLastChecked = doc.getElementById('compare-last-checked');
+            if (lastChecked && newLastChecked) lastChecked.innerHTML = newLastChecked.innerHTML;
+            
+            const mainTitle = document.getElementById('main-title');
+            const newMainTitle = doc.getElementById('main-title');
+            if (mainTitle && newMainTitle) mainTitle.innerHTML = newMainTitle.innerHTML;
+            
+            const mainInfo = document.getElementById('main-info');
+            const newMainInfo = doc.getElementById('main-info');
+            if (mainInfo && newMainInfo) mainInfo.innerHTML = newMainInfo.innerHTML;
             
             // Restore show all state
             if (isShowAll) {
@@ -499,14 +538,14 @@ export default {
       <div class="progress-bar" style="margin-top: 0;">
         <div class="progress-fill"></div>
       </div>
-      <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--text-muted); margin-top: 8px; font-weight: 500;">
+      <div id="progress-stats" style="display: flex; justify-content: space-between; font-size: 13px; color: var(--text-muted); margin-top: 8px; font-weight: 500;">
         <span>${progressPercent}% Selesai</span>
         <span>Data: ${totalSynced} / ${totalEstimasi}</span>
       </div>
     </div>
     
-    <h1>Sekolah Sync Dashboard ${isCustom ? '<span style="color: #f59e0b; font-size: 14px; vertical-align: middle; background: rgba(245, 158, 11, 0.15); padding: 4px 10px; border-radius: 20px;">Custom</span>' : '<span style="color: var(--primary-light); font-size: 14px; vertical-align: middle; background: rgba(99, 102, 241, 0.15); padding: 4px 10px; border-radius: 20px;">Full</span>'}</h1>
-    <div style="font-size: 15px; color: #d1d5db; line-height: 1.5;">
+    <h1 id="main-title">Sekolah Sync Dashboard ${isCustom ? '<span style="color: #f59e0b; font-size: 14px; vertical-align: middle; background: rgba(245, 158, 11, 0.15); padding: 4px 10px; border-radius: 20px;">Custom</span>' : '<span style="color: var(--primary-light); font-size: 14px; vertical-align: middle; background: rgba(99, 102, 241, 0.15); padding: 4px 10px; border-radius: 20px;">Full</span>'}</h1>
+    <div id="main-info" style="font-size: 15px; color: #d1d5db; line-height: 1.5;">
       Bentuk Aktif: <strong style="color: var(--primary-light); text-transform: uppercase;">${bentukBerikutnya}</strong><br>
       Offset Saat Ini: <strong>${offsetBerikutnya}</strong><br>
       Update Terakhir: <strong style="color: #fff;">${activeRow.updated_at || '-'} WIB</strong>
@@ -535,17 +574,17 @@ export default {
     
     <div style="margin-top: 32px; text-align: left;">
       <h2 style="font-size: 18px; margin-bottom: 16px; color: #fff; font-weight: 600; padding-bottom: 8px; border-bottom: 1px solid var(--border);">Log Aktivitas Terakhir</h2>
-      <div style="display: flex; flex-direction: column; gap: 8px;">
+      <div id="log-container" style="display: flex; flex-direction: column; gap: 8px;">
         ${logHtml}
       </div>
       ${paginationHtml}
     </div>
 
     <div style="margin-top: 32px; text-align: left;">
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px;">
+      <div id="compare-header-box" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px;">
         <div>
           <h2 style="font-size: 18px; color: #fff; font-weight: 600; margin: 0 0 4px 0;">Perbandingan Data (Belajar.id vs DB)</h2>
-          <div style="font-size: 12px; color: var(--text-muted);">Terakhir dicek: ${lastChecked}</div>
+          <div id="compare-last-checked" style="font-size: 12px; color: var(--text-muted);">Terakhir dicek: ${lastChecked}</div>
         </div>
         ${compareCache && compareCache.value.length > 5 ? `<button id="btn-compare" style="background: var(--primary); color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; transition: background 0.2s;" onclick="toggleComparison()">Tampilkan Semua</button>` : ''}
       </div>
