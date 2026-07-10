@@ -397,8 +397,23 @@ export default {
       // Restore grid scroll
       const gridScrollPos = sessionStorage.getItem("gridScrollPos");
       const gridEl = document.querySelector(".jadwal-grid");
-      if (gridScrollPos && gridEl) {
-        gridEl.scrollTop = parseInt(gridScrollPos);
+      if (gridEl) {
+        if (gridScrollPos !== null) {
+          gridEl.scrollTop = parseInt(gridScrollPos);
+        } else {
+          // Auto-focus to today's schedule on first load
+          const todayCard = gridEl.querySelector('.day-card.today');
+          if (todayCard) {
+            const topPos = todayCard.offsetTop - gridEl.offsetTop;
+            gridEl.scrollTop = topPos > 0 ? topPos : 0;
+            sessionStorage.setItem("gridScrollPos", gridEl.scrollTop);
+          }
+        }
+        
+        // Save scroll position on manual scroll
+        gridEl.addEventListener('scroll', function() {
+          sessionStorage.setItem("gridScrollPos", gridEl.scrollTop);
+        });
       }
       
       // Restore compare horizontal scroll
