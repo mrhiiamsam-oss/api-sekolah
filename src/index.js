@@ -771,14 +771,15 @@ export default {
           if (body.customSync) {
             // Gunakan LOWER(bentuk_pendidikan) karena database mungkin menyimpannya sebagai huruf besar (misal 'TK', 'SD'),
             // sedangkan body.bentukList berisi huruf kecil (misal 'tk', 'sd').
-            const placeholders = body.bentukList.map(() => '?').join(',');
+            const dbBentukList = body.bentukList.map(b => b === 'smag-k' ? 'smag.k' : b.replace(/-/g, ' '));
+            const placeholders = dbBentukList.map(() => '?').join(',');
             let query = `DELETE FROM sekolah WHERE LOWER(bentuk_pendidikan) IN (${placeholders}) AND migrated_at < ?`;
-            let params = [...body.bentukList, body.waktuMulai];
+            let params = [...dbBentukList, body.waktuMulai];
 
             if (body.namaProvinsi && body.namaProvinsi !== 'SEMUA') {
                const searchProv = body.namaProvinsi === 'LUAR NEGERI' ? 'LUAR NEGERI' : `PROV. ${body.namaProvinsi}`;
                query = `DELETE FROM sekolah WHERE LOWER(bentuk_pendidikan) IN (${placeholders}) AND nama_provinsi = ? AND migrated_at < ?`;
-               params = [...body.bentukList, searchProv, body.waktuMulai];
+               params = [...dbBentukList, searchProv, body.waktuMulai];
             }
 
             const delRes = await env.DB.prepare(query).bind(...params).run();
