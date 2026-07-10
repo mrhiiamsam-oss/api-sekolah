@@ -7,9 +7,8 @@ on:
         description: '(Opsional) Timpa provinsi dengan manual (misal: DKI JAKARTA). Kosongkan untuk ikut jadwal.'
         type: string
         default: ''
-  schedule:
-    # Berjalan SETIAP HARI jam 17:13 UTC (00:13 WIB keesokan harinya) untuk menghindari delay antrean server
-    - cron: '13 17 * * *'
+  repository_dispatch:
+    types: [trigger-cron]
 
 permissions:
   actions: write
