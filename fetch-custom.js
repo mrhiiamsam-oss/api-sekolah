@@ -87,31 +87,7 @@ async function fetchCustomData() {
   
   let kodeWilayahList = [];
   if (argProvinsi === "SEMUA" || argProvinsi === "") {
-    try {
-      console.log(`Mengambil data perbandingan (Smart Sync) dari ${WORKER_URL}/api/compare...`);
-      const compareRes = await fetch(`${WORKER_URL}/api/compare`);
-      if (compareRes.ok) {
-        const compareJson = await compareRes.json();
-        if (compareJson.success && compareJson.data) {
-          const diffProvinces = compareJson.data.filter(d => Math.abs(d.selisih) > 0);
-          if (diffProvinces.length === 0) {
-            console.log(`✅ SELURUH PROVINSI SUDAH SINKRON (Tidak ada selisih data). Membatalkan sinkronisasi untuk menghemat resource.`);
-            return;
-          }
-          console.log(`⚠️ Terdapat ${diffProvinces.length} provinsi yang datanya berbeda. Hanya provinsi-provinsi ini yang akan disinkronisasi.`);
-          kodeWilayahList = diffProvinces.map(d => d.kode);
-        } else {
-          console.log(`Gagal mem-parsing data Smart Sync. Jatuh kembali ke sinkronisasi seluruh 39 provinsi.`);
-          kodeWilayahList = Object.keys(PROVINCES);
-        }
-      } else {
-        console.log(`Gagal menghubungi API Smart Sync. Jatuh kembali ke sinkronisasi seluruh 39 provinsi.`);
-        kodeWilayahList = Object.keys(PROVINCES);
-      }
-    } catch (e) {
-      console.log(`Error saat Smart Sync: ${e.message}. Jatuh kembali ke sinkronisasi seluruh 39 provinsi.`);
-      kodeWilayahList = Object.keys(PROVINCES);
-    }
+    kodeWilayahList = Object.keys(PROVINCES);
   } else {
     const parts = argProvinsi.split(',').map(p => p.trim()).filter(p => p);
     for (const p of parts) {
@@ -132,6 +108,36 @@ async function fetchCustomData() {
       console.log(`Tidak ada provinsi valid yang dimasukkan. Jatuh kembali ke sinkronisasi seluruh 39 provinsi.`);
       kodeWilayahList = Object.keys(PROVINCES);
     }
+  }
+
+  // --- SMART SYNC FILTER ---
+  try {
+    console.log(`Mengambil data perbandingan (Smart Sync) dari ${WORKER_URL}/api/compare...`);
+    const compareRes = await fetch(`${WORKER_URL}/api/compare`);
+    if (compareRes.ok) {
+      const compareJson = await compareRes.json();
+      if (compareJson.success && compareJson.data) {
+        // Ambil kode-kode wilayah yang selisihnya tidak nol
+        const diffCodes = compareJson.data.filter(d => Math.abs(d.selisih) > 0).map(d => d.kode);
+        
+        // Iris dengan daftar wilayah yang diminta
+        const filteredList = kodeWilayahList.filter(kode => diffCodes.includes(kode));
+        
+        if (filteredList.length === 0) {
+          console.log(`✅ SEMUA PROVINSI TARGET SUDAH SINKRON. Membatalkan sinkronisasi untuk menghemat resource.`);
+          return;
+        }
+        
+        console.log(`⚠️ Dari target, terdapat ${filteredList.length} provinsi yang datanya berbeda. Memulai sinkronisasi...`);
+        kodeWilayahList = filteredList;
+      } else {
+        console.log(`Gagal mem-parsing data Smart Sync. Akan menyinkronkan target secara default.`);
+      }
+    } else {
+      console.log(`Gagal menghubungi API Smart Sync. Akan menyinkronkan target secara default.`);
+    }
+  } catch (e) {
+    console.log(`Error saat mengecek Smart Sync: ${e.message}. Akan menyinkronkan target secara default.`);
   }
 
   // Buat daftar antrean task: kombinasi tiap provinsi dan tiap bentuk sekolah
