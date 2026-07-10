@@ -190,12 +190,31 @@ export default {
         jadwalHtml += '</div></div>';
 
         // Fetch Log Aktivitas
+        const pageStr = url.searchParams.get('page') || '1';
+        const page = parseInt(pageStr, 10) || 1;
+        const limit = 10;
+        const offset = (page - 1) * limit;
+
         let logAktivitasList = [];
+        let totalLogs = 0;
         try {
-          const { results: logRes } = await env.DB.prepare('SELECT * FROM log_aktivitas_provinsi ORDER BY waktu_selesai DESC LIMIT 20').all();
+          const { results: countRes } = await env.DB.prepare('SELECT COUNT(*) as total FROM log_aktivitas_provinsi').all();
+          totalLogs = countRes[0]?.total || 0;
+
+          const { results: logRes } = await env.DB.prepare('SELECT * FROM log_aktivitas_provinsi ORDER BY waktu_selesai DESC LIMIT ? OFFSET ?').bind(limit, offset).all();
           logAktivitasList = logRes || [];
         } catch (e) {} // Abaikan jika tabel belum ada
         
+        const totalPages = Math.ceil(totalLogs / limit) || 1;
+        let paginationHtml = '';
+        if (totalPages > 1) {
+          paginationHtml = `<div style="display: flex; justify-content: center; gap: 8px; margin-top: 16px;">
+            ${page > 1 ? `<a href="/?page=${page - 1}" style="padding: 6px 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 6px; color: var(--text); text-decoration: none; font-size: 13px;">&laquo; Prev</a>` : ''}
+            <span style="padding: 6px 12px; font-size: 13px; color: var(--text-muted);">Halaman ${page} dari ${totalPages}</span>
+            ${page < totalPages ? `<a href="/?page=${page + 1}" style="padding: 6px 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 6px; color: var(--text); text-decoration: none; font-size: 13px;">Next &raquo;</a>` : ''}
+          </div>`;
+        }
+
         let logHtml = logAktivitasList.length > 0 ? logAktivitasList.map(log => {
           const totalData = log.total_baru + log.total_diperbarui + log.total_tidak_berubah;
           return `<div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 12px; font-size: 13px;">
@@ -386,6 +405,7 @@ export default {
       <div style="display: flex; flex-direction: column; gap: 8px;">
         ${logHtml}
       </div>
+      ${paginationHtml}
     </div>
     
     <a href="https://api-sekolah-kita.pages.dev/" class="btn" target="_blank" rel="noopener noreferrer">
