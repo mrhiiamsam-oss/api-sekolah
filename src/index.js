@@ -119,11 +119,19 @@ export default {
         let hasDiffGlobal = false;
         let lastChecked = 'Belum ada data';
         
+        let sumTotalApi = 0;
+        let sumTotalDb = 0;
+        let diffCount = 0;
+        
         if (compareCache) {
            lastChecked = compareCache.updated_at + ' WIB';
            compareCache.value.forEach(d => {
               compareMap[d.nama.replace(/[^A-Z]/g, '')] = d.selisih;
               if (d.selisih !== 0) hasDiffGlobal = true;
+              
+              sumTotalApi += d.total_api || 0;
+              sumTotalDb += d.total_db || 0;
+              if (d.selisih !== 0) diffCount++;
            });
            
            compareHtml = compareCache.value.map((d, idx) => {
@@ -144,6 +152,19 @@ export default {
            if(hasDiffGlobal) {
              compareHtml += '<tr class="hidden-row" style="display: none;"><td colspan="5" style="padding: 16px; text-align: center;"><div style="color: var(--text-muted); font-size: 12px; margin-bottom: 8px;">Ada data yang berbeda. Smart Sync (GitHub Action) akan otomatis memprioritaskan provinsi yang berselisih saja.</div></td></tr>';
            }
+           
+           // Tambahkan baris total
+           const totalSelisih = sumTotalApi - sumTotalDb;
+           const totalColor = totalSelisih === 0 ? 'var(--success)' : 'var(--danger)';
+           compareHtml += `
+             <tr class="hidden-row" style="display: none; border-top: 2px solid var(--border); font-weight: bold; background: rgba(0,0,0,0.2);">
+               <td style="padding: 12px 8px;">TOTAL KESELURUHAN</td>
+               <td style="padding: 12px 8px; text-align: center; color: var(--info);">${sumTotalApi.toLocaleString('id-ID')}</td>
+               <td style="padding: 12px 8px; text-align: center; color: var(--primary-light);">${sumTotalDb.toLocaleString('id-ID')}</td>
+               <td style="padding: 12px 8px; text-align: center; color: ${totalColor};">${totalSelisih > 0 ? '+' : ''}${totalSelisih.toLocaleString('id-ID')}</td>
+               <td style="padding: 12px 8px; text-align: center; font-size: 11px;">${diffCount} Provinsi Berselisih</td>
+             </tr>
+           `;
         } else {
            compareHtml = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted);">Belum ada data perbandingan. Jalankan cron terlebih dahulu.</td></tr>';
         }
@@ -379,6 +400,17 @@ export default {
       if (gridScrollPos && gridEl) {
         gridEl.scrollTop = parseInt(gridScrollPos);
       }
+      
+      // Restore show all compare
+      const showAll = sessionStorage.getItem("compareShowAll");
+      if (showAll === "true") {
+         const rows = document.querySelectorAll('.hidden-row');
+         const btn = document.getElementById('btn-compare');
+         if (rows.length > 0 && btn) {
+            rows.forEach(r => r.style.display = 'table-row');
+            btn.innerText = 'Tutup Perbandingan';
+         }
+      }
     });
     function doAutoReload() {
       if (window.isAutoReloadPaused) {
@@ -489,6 +521,7 @@ export default {
              r.style.display = isHidden ? 'table-row' : 'none';
           });
           btn.innerText = isHidden ? 'Tutup Perbandingan' : 'Tampilkan Semua';
+          sessionStorage.setItem('compareShowAll', isHidden ? 'true' : 'false');
         }
       }
     </script>
