@@ -23,25 +23,25 @@ export default {
             total_estimasi
           FROM status_sinkronisasi WHERE id IN (1, 2)
         `).all();
-        
+
         let provStatusList = [];
         let compareCache = null;
         try {
           const { results: provRes } = await env.DB.prepare('SELECT nama_provinsi, terakhir_sukses FROM provinsi_sync_status').all();
           provStatusList = provRes || [];
-          
+
           const { results: cacheRes } = await env.DB.prepare('SELECT value, updated_at FROM cache_data WHERE key = ?').bind('perbandingan').all();
           if (cacheRes && cacheRes.length > 0) {
-             compareCache = { value: JSON.parse(cacheRes[0].value), updated_at: cacheRes[0].updated_at };
+            compareCache = { value: JSON.parse(cacheRes[0].value), updated_at: cacheRes[0].updated_at };
           }
-        } catch (e) {} // Abaikan jika tabel belum ada
-        
+        } catch (e) { } // Abaikan jika tabel belum ada
+
         let row1 = results?.find(r => r.id === 1) || { bentuk_aktif: 'tk', offset_terakhir: 0 };
         let row2 = results?.find(r => r.id === 2);
-        
+
         let activeRow = row1;
         let isCustom = false;
-        
+
         if (row2 && row2.updated_at && row1.updated_at) {
           const t1 = new Date(row1.updated_at.replace(' ', 'T') + '+07:00').getTime();
           const t2 = new Date(row2.updated_at.replace(' ', 'T') + '+07:00').getTime();
@@ -53,25 +53,25 @@ export default {
           activeRow = row2;
           isCustom = true;
         }
-        
+
         const bentukBerikutnya = activeRow.bentuk_aktif || 'tk';
         const offsetBerikutnya = activeRow.offset_terakhir || 0;
-        
+
         const totalEstimasi = activeRow.total_estimasi || (isCustom ? 12654 : 553456);
         const totalSynced = (activeRow.total_baru || 0) + (activeRow.total_diperbarui || 0) + (activeRow.total_tidak_berubah || 0);
-        
+
         const currentIndex = VALID_BENTUK.indexOf(bentukBerikutnya);
         let progressPercent = 0;
         if (isCustom) {
-           progressPercent = totalEstimasi > 0 ? Math.min(100, Math.round((totalSynced / totalEstimasi) * 100)) : 0;
+          progressPercent = totalEstimasi > 0 ? Math.min(100, Math.round((totalSynced / totalEstimasi) * 100)) : 0;
         } else {
-           progressPercent = Math.max(0, Math.round((currentIndex / VALID_BENTUK.length) * 100));
+          progressPercent = Math.max(0, Math.round((currentIndex / VALID_BENTUK.length) * 100));
         }
-        
+
         const selesai = isCustom ? (bentukBerikutnya === 'Selesai') : (bentukBerikutnya === 'tk' && offsetBerikutnya === 0 && activeRow.waktu_selesai_terakhir !== null && progressPercent === 0);
-        
+
         if (selesai) {
-           progressPercent = 100;
+          progressPercent = 100;
         }
 
         let isRunning = false;
@@ -101,62 +101,62 @@ export default {
         const nowUtcMs = new Date().getTime();
         const wibMs = nowUtcMs + (7 * 60 * 60 * 1000);
         const dateWIB = new Date(wibMs);
-        
+
         const todayId = dateWIB.getUTCDay(); // 0 = Minggu, 1 = Senin
         const currentDayIndex = todayId === 0 ? 7 : todayId;
-        
+
         // Dapatkan representasi tanggal jam 00:00 di WIB untuk kalkulasi offset hari
         const today00Utc = Date.UTC(dateWIB.getUTCFullYear(), dateWIB.getUTCMonth(), dateWIB.getUTCDate());
         const today00WibAbsoluteMs = today00Utc - (7 * 60 * 60 * 1000); // Absolute timestamp 00:00 WIB hari ini
-        
+
         const dateOfMonth = dateWIB.getUTCDate();
         const isSecondWeek = dateOfMonth >= 8 && dateOfMonth <= 14;
-        
-        const secondWeekNoticeHtml = isSecondWeek 
+
+        const secondWeekNoticeHtml = isSecondWeek
           ? `<div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.18); padding: 12px 16px; border-radius: 12px; font-size: 13px; color: #f59e0b; margin-top: 16px; text-align: left; line-height: 1.5; font-weight: 500;">
               📅 <strong>Minggu Ke-2 Aktif (Tgl ${dateOfMonth} WIB):</strong> Mode Update Wajib Penuh aktif. Provinsi terjadwal hari ini akan disinkronkan secara total tanpa dilewati.
              </div>`
           : `<div style="background: rgba(34, 197, 94, 0.04); border: 1px solid rgba(34, 197, 94, 0.12); padding: 12px 16px; border-radius: 12px; font-size: 13px; color: var(--success); margin-top: 16px; text-align: left; line-height: 1.5; font-weight: 500;">
               ⚡️ <strong>Mode Smart Sync Aktif:</strong> Provinsi terjadwal hari ini yang sudah sinkron (selisih 0) akan dilewati otomatis. Update wajib berikutnya pada tanggal 8-14.
              </div>`;
-        
+
         const provSyncMap = {};
         provStatusList.forEach(p => {
-           provSyncMap[p.nama_provinsi] = new Date(p.terakhir_sukses.replace(' ', 'T') + '+07:00').getTime();
+          provSyncMap[p.nama_provinsi] = new Date(p.terakhir_sukses.replace(' ', 'T') + '+07:00').getTime();
         });
 
         const compareMap = {};
         let compareHtml = '';
         let hasDiffGlobal = false;
         let lastChecked = 'Belum ada data';
-        
+
         let sumTotalApi = 0;
         let sumTotalDb = 0;
         let diffCount = 0;
-        
+
         if (compareCache) {
-           lastChecked = compareCache.updated_at + ' WIB';
-           compareCache.value.forEach(d => {
-              compareMap[d.nama.replace(/[^A-Z]/g, '')] = d.selisih;
-              if (d.selisih !== 0) hasDiffGlobal = true;
-              
-              sumTotalApi += d.total_api || 0;
-              sumTotalDb += d.total_db || 0;
-              if (d.selisih !== 0) diffCount++;
-           });
-           compareCache.value.sort((a, b) => {
-              const aDiff = a.selisih !== 0 ? 1 : 0;
-              const bDiff = b.selisih !== 0 ? 1 : 0;
-              if (aDiff !== bDiff) return bDiff - aDiff;
-              return a.nama.localeCompare(b.nama);
-           });
-           
-           compareHtml = compareCache.value.map((d, idx) => {
-              const selisihColor = d.selisih === 0 ? 'var(--success)' : 'var(--danger)';
-              const statusIcon = d.selisih === 0 ? '✅ Sinkron' : '⚠️ Berbeda';
-              const displayStyle = idx >= 5 ? 'display: none;' : '';
-              const trClass = idx >= 5 ? 'hidden-row' : '';
-              return `
+          lastChecked = compareCache.updated_at + ' WIB';
+          compareCache.value.forEach(d => {
+            compareMap[d.nama.replace(/[^A-Z]/g, '')] = d.selisih;
+            if (d.selisih !== 0) hasDiffGlobal = true;
+
+            sumTotalApi += d.total_api || 0;
+            sumTotalDb += d.total_db || 0;
+            if (d.selisih !== 0) diffCount++;
+          });
+          compareCache.value.sort((a, b) => {
+            const aDiff = a.selisih !== 0 ? 1 : 0;
+            const bDiff = b.selisih !== 0 ? 1 : 0;
+            if (aDiff !== bDiff) return bDiff - aDiff;
+            return a.nama.localeCompare(b.nama);
+          });
+
+          compareHtml = compareCache.value.map((d, idx) => {
+            const selisihColor = d.selisih === 0 ? 'var(--success)' : 'var(--danger)';
+            const statusIcon = d.selisih === 0 ? '✅ Sinkron' : '⚠️ Berbeda';
+            const displayStyle = idx >= 5 ? 'display: none;' : '';
+            const trClass = idx >= 5 ? 'hidden-row' : '';
+            return `
                 <tr class="${trClass}" style="border-bottom: 1px solid rgba(255,255,255,0.02); ${displayStyle}">
                   <td style="padding: 8px;">${d.nama} <div style="font-size: 10px; color: var(--text-muted)">Kode: ${d.kode}</div></td>
                   <td style="padding: 8px; text-align: center; color: var(--info);">${d.total_api.toLocaleString('id-ID')}</td>
@@ -165,15 +165,15 @@ export default {
                   <td style="padding: 8px; text-align: center; color: ${selisihColor}; font-size: 11px;">${statusIcon}</td>
                 </tr>
               `;
-           }).join('');
-           if(hasDiffGlobal) {
-             compareHtml += '<tr class="hidden-row" style="display: none;"><td colspan="5" style="padding: 16px; text-align: center;"><div style="color: var(--text-muted); font-size: 12px; margin-bottom: 8px;">Ada data yang berbeda. Smart Sync (GitHub Action) akan otomatis memprioritaskan provinsi yang berselisih saja.</div></td></tr>';
-           }
-           
-           // Tambahkan baris total
-           const totalSelisih = sumTotalApi - sumTotalDb;
-           const totalColor = totalSelisih === 0 ? 'var(--success)' : 'var(--danger)';
-           compareHtml += `
+          }).join('');
+          if (hasDiffGlobal) {
+            compareHtml += '<tr class="hidden-row" style="display: none;"><td colspan="5" style="padding: 16px; text-align: center;"><div style="color: var(--text-muted); font-size: 12px; margin-bottom: 8px;">Ada data yang berbeda. Smart Sync (GitHub Action) akan otomatis memprioritaskan provinsi yang berselisih saja.</div></td></tr>';
+          }
+
+          // Tambahkan baris total
+          const totalSelisih = sumTotalApi - sumTotalDb;
+          const totalColor = totalSelisih === 0 ? 'var(--success)' : 'var(--danger)';
+          compareHtml += `
              <tr class="hidden-row" style="display: none; border-top: 2px solid var(--border); font-weight: bold; background: rgba(0,0,0,0.2);">
                <td style="padding: 12px 8px;">TOTAL KESELURUHAN</td>
                <td style="padding: 12px 8px; text-align: center; color: var(--info);">${sumTotalApi.toLocaleString('id-ID')}</td>
@@ -183,43 +183,43 @@ export default {
              </tr>
            `;
         } else {
-           compareHtml = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted);">Belum ada data perbandingan. Jalankan cron terlebih dahulu.</td></tr>';
+          compareHtml = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted);">Belum ada data perbandingan. Jalankan cron terlebih dahulu.</td></tr>';
         }
 
-        let jadwalHtml = '<div class="jadwal-container"><h2>Jadwal Sinkronisasi Mingguan (00:00 WIB)</h2><div class="jadwal-grid">';
+        let jadwalHtml = '<div class="jadwal-container"><h2>Jadwal Sinkronisasi Harian (01:30 WITA)</h2><div class="jadwal-grid">';
         jadwal.forEach(j => {
           const jIndex = j.id === 0 ? 7 : j.id;
-          
+
           let diff = jIndex - currentDayIndex;
           if (diff < -1) diff += 7; // Jika sudah lewat >1 hari, maka jadikan minggu depan
           if (diff === 6) diff = -1; // +6 hari dari hari ini sama dengan kemarin
-          
+
           const isToday = diff === 0;
           const isPast = diff === -1;
-          
+
           // Hitung tanggal target
           const targetTime = today00Utc + (diff * 24 * 60 * 60 * 1000);
           const targetDate = new Date(targetTime);
-          
+
           const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
           const d = targetDate.getUTCDate();
           const m = monthNames[targetDate.getUTCMonth()];
           const y = targetDate.getUTCFullYear();
           const dateStr = `${d} ${m} ${y}`;
           const displayHari = `${j.hari}, ${dateStr}`;
-          
+
           let dayClass = isToday ? 'day-card today' : 'day-card';
           let dayHeaderClass = isToday ? 'day-header today' : 'day-header';
-          
+
           let provListHtml = j.provs.map(prov => {
             let statusIcon = '🕒';
             let statusText = 'Menunggu';
             let itemClass = 'prov-item waiting';
-            
+
             const cleanName = (name) => name.replace(/[^A-Z]/g, '');
             const matchingKey = Object.keys(provSyncMap).find(k => cleanName(k) === cleanName(prov));
             let lastSyncTime = matchingKey ? provSyncMap[matchingKey] : 0;
-            
+
             const isCurrentlyRunning = isRunning && activeRow.bentuk_aktif && cleanName(activeRow.bentuk_aktif).includes(cleanName(prov));
             const isCompleted = lastSyncTime >= targetTime;
             const isActiveButNotRunning = !isRunning && activeRow.bentuk_aktif && cleanName(activeRow.bentuk_aktif).includes(cleanName(prov));
@@ -227,7 +227,7 @@ export default {
             // Logika baru: Ikuti status sinkron database (selisih == 0) untuk SEMUA hari
             const isSynced = compareMap[cleanName(prov)] === 0;
             const hasData = compareMap[cleanName(prov)] !== undefined;
-            
+
             if (isCurrentlyRunning) {
               statusIcon = '<span class="spin-icon">🔄</span>';
               statusText = 'Proses Sinkronisasi';
@@ -245,7 +245,7 @@ export default {
               statusText = 'Menunggu Sinkronisasi';
               itemClass = 'prov-item waiting';
             }
-            
+
             return `<div class="${itemClass}">
               <span class="prov-name">${prov}</span>
               <span class="prov-status" title="${statusText}">${statusIcon}</span>
@@ -277,8 +277,8 @@ export default {
 
           const { results: logRes } = await env.DB.prepare('SELECT * FROM log_aktivitas_provinsi ORDER BY waktu_selesai DESC LIMIT ? OFFSET ?').bind(limit, offset).all();
           logAktivitasList = logRes || [];
-        } catch (e) {} // Abaikan jika tabel belum ada
-        
+        } catch (e) { } // Abaikan jika tabel belum ada
+
         const totalPages = Math.ceil(totalLogs / limit) || 1;
         let paginationHtml = '';
         if (totalPages > 1) {
@@ -657,32 +657,32 @@ export default {
     if (url.pathname === '/api/compare' && request.method === 'GET') {
       try {
         const isCron = url.searchParams.get('cron') === 'true';
-        
+
         // Buat tabel cache_data jika belum ada
         await env.DB.prepare(`CREATE TABLE IF NOT EXISTS cache_data (key TEXT PRIMARY KEY, value TEXT, updated_at TIMESTAMPTZ)`).run();
 
         if (!isCron) {
-           const { results } = await env.DB.prepare("SELECT value FROM cache_data WHERE key = 'perbandingan'").all();
-           if (results && results.length > 0) {
-              return new Response(JSON.stringify({ success: true, data: JSON.parse(results[0].value) }), {
-                headers: { 'content-type': 'application/json' }
-              });
-           }
-           // Jika kosong, lanjut ambil data dari API untuk inisialisasi awal
+          const { results } = await env.DB.prepare("SELECT value FROM cache_data WHERE key = 'perbandingan'").all();
+          if (results && results.length > 0) {
+            return new Response(JSON.stringify({ success: true, data: JSON.parse(results[0].value) }), {
+              headers: { 'content-type': 'application/json' }
+            });
+          }
+          // Jika kosong, lanjut ambil data dari API untuk inisialisasi awal
         }
 
         const PROVINCES = {
-            '010000': 'DKI JAKARTA', '020000': 'JAWA BARAT', '030000': 'JAWA TENGAH', '040000': 'DI YOGYAKARTA',
-            '050000': 'JAWA TIMUR', '060000': 'ACEH', '070000': 'SUMATERA UTARA', '080000': 'SUMATERA BARAT',
-            '090000': 'RIAU', '100000': 'JAMBI', '110000': 'SUMATERA SELATAN', '120000': 'LAMPUNG',
-            '130000': 'KALIMANTAN BARAT', '140000': 'KALIMANTAN TENGAH', '150000': 'KALIMANTAN SELATAN',
-            '160000': 'KALIMANTAN TIMUR', '170000': 'SULAWESI UTARA', '180000': 'SULAWESI TENGAH',
-            '190000': 'SULAWESI SELATAN', '200000': 'SULAWESI TENGGARA', '210000': 'MALUKU', '220000': 'BALI',
-            '230000': 'NUSA TENGGARA BARAT', '240000': 'NUSA TENGGARA TIMUR', '250000': 'PAPUA', '260000': 'BENGKULU',
-            '270000': 'MALUKU UTARA', '280000': 'BANTEN', '290000': 'KEPULAUAN BANGKA BELITUNG', '300000': 'GORONTALO',
-            '310000': 'KEPULAUAN RIAU', '320000': 'PAPUA BARAT', '330000': 'SULAWESI BARAT', '340000': 'KALIMANTAN UTARA',
-            '350000': 'LUAR NEGERI', '360000': 'PAPUA TENGAH', '370000': 'PAPUA SELATAN', '380000': 'PAPUA PEGUNUNGAN', 
-            '390000': 'PAPUA BARAT DAYA'
+          '010000': 'DKI JAKARTA', '020000': 'JAWA BARAT', '030000': 'JAWA TENGAH', '040000': 'DI YOGYAKARTA',
+          '050000': 'JAWA TIMUR', '060000': 'ACEH', '070000': 'SUMATERA UTARA', '080000': 'SUMATERA BARAT',
+          '090000': 'RIAU', '100000': 'JAMBI', '110000': 'SUMATERA SELATAN', '120000': 'LAMPUNG',
+          '130000': 'KALIMANTAN BARAT', '140000': 'KALIMANTAN TENGAH', '150000': 'KALIMANTAN SELATAN',
+          '160000': 'KALIMANTAN TIMUR', '170000': 'SULAWESI UTARA', '180000': 'SULAWESI TENGAH',
+          '190000': 'SULAWESI SELATAN', '200000': 'SULAWESI TENGGARA', '210000': 'MALUKU', '220000': 'BALI',
+          '230000': 'NUSA TENGGARA BARAT', '240000': 'NUSA TENGGARA TIMUR', '250000': 'PAPUA', '260000': 'BENGKULU',
+          '270000': 'MALUKU UTARA', '280000': 'BANTEN', '290000': 'KEPULAUAN BANGKA BELITUNG', '300000': 'GORONTALO',
+          '310000': 'KEPULAUAN RIAU', '320000': 'PAPUA BARAT', '330000': 'SULAWESI BARAT', '340000': 'KALIMANTAN UTARA',
+          '350000': 'LUAR NEGERI', '360000': 'PAPUA TENGAH', '370000': 'PAPUA SELATAN', '380000': 'PAPUA PEGUNUNGAN',
+          '390000': 'PAPUA BARAT DAYA'
         };
 
         const promises = Object.keys(PROVINCES).map(async (kode) => {
@@ -690,16 +690,16 @@ export default {
             const res = await fetch(`https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kode}?limit=1&offset=0`);
             const json = await res.json();
             return { kode, nama: PROVINCES[kode], total_api: json.meta ? json.meta.total : 0 };
-          } catch(e) {
+          } catch (e) {
             return { kode, nama: PROVINCES[kode], total_api: 0 };
           }
         });
-        
+
         const apiData = await Promise.all(promises);
 
         // Fetch dari DB
         const { results: dbRes } = await env.DB.prepare('SELECT nama_provinsi as provinsi, COUNT(*) as total_db FROM sekolah GROUP BY nama_provinsi').all();
-        
+
         const cleanName = (name) => {
           if (!name) return "";
           let c = name.replace(/[^A-Z]/gi, '').toUpperCase();
@@ -716,22 +716,22 @@ export default {
         };
 
         const comparison = apiData.map(d => {
-           const duplicateOffset = API_DUPLICATES[d.kode] || 0;
-           const adjustedTotalApi = d.total_api - duplicateOffset;
-           const total_db = dbMap[cleanName(d.nama)] || 0;
-           const selisih = adjustedTotalApi - total_db;
-           return { ...d, total_api: adjustedTotalApi, total_db, selisih };
+          const duplicateOffset = API_DUPLICATES[d.kode] || 0;
+          const adjustedTotalApi = d.total_api - duplicateOffset;
+          const total_db = dbMap[cleanName(d.nama)] || 0;
+          const selisih = adjustedTotalApi - total_db;
+          return { ...d, total_api: adjustedTotalApi, total_db, selisih };
         });
-        
+
         comparison.sort((a, b) => {
-           const aDiff = a.selisih !== 0 ? 1 : 0;
-           const bDiff = b.selisih !== 0 ? 1 : 0;
-           if (aDiff !== bDiff) return bDiff - aDiff;
-           return a.nama.localeCompare(b.nama);
+          const aDiff = a.selisih !== 0 ? 1 : 0;
+          const bDiff = b.selisih !== 0 ? 1 : 0;
+          if (aDiff !== bDiff) return bDiff - aDiff;
+          return a.nama.localeCompare(b.nama);
         });
-        
+
         const jsonResult = JSON.stringify(comparison);
-        
+
         // Simpan ke cache
         await env.DB.prepare(`
           INSERT INTO cache_data (key, value, updated_at) 
@@ -759,12 +759,12 @@ export default {
         const { dataList, bentukAktif, offset, isFinished, ...customParams } = body;
 
         let stats = { baru: 0, diperbarui: 0, tidakBerubah: 0, dihapus: 0 };
-        
+
         // Ensure total_estimasi column exists
         try {
           await env.DB.prepare(`ALTER TABLE status_sinkronisasi ADD COLUMN total_estimasi INTEGER DEFAULT 0`).run();
-        } catch (e) {}
-        
+        } catch (e) { }
+
         if (dataList && dataList.length > 0) {
           stats = await syncBatch(env.DB, dataList);
         }
@@ -774,7 +774,7 @@ export default {
         if (bentukAktif === 'tk' && offset === 0) {
           resetStats = ", total_baru = 0, total_diperbarui = 0, total_tidak_berubah = 0, total_dihapus = 0, waktu_mulai_sinkronisasi = datetime('now', '+7 hours')";
         }
-        
+
         // Simpan log terakhir provinsi sukses
         if (body.customSync && body.namaProvinsi && body.namaProvinsi !== 'SEMUA') {
           await env.DB.prepare(`CREATE TABLE IF NOT EXISTS provinsi_sync_status (nama_provinsi TEXT PRIMARY KEY, terakhir_sukses TIMESTAMPTZ)`).run();
@@ -795,29 +795,29 @@ export default {
             let params = [...dbBentukList, body.waktuMulai];
 
             if (body.namaProvinsi && body.namaProvinsi !== 'SEMUA') {
-               const searchProv = body.namaProvinsi === 'LUAR NEGERI' ? 'LUAR NEGERI' : `PROV. ${body.namaProvinsi}`;
-               query = `DELETE FROM sekolah WHERE LOWER(bentuk_pendidikan) IN (${placeholders}) AND nama_provinsi = ? AND migrated_at < ?`;
-               params = [...dbBentukList, searchProv, body.waktuMulai];
+              const searchProv = body.namaProvinsi === 'LUAR NEGERI' ? 'LUAR NEGERI' : `PROV. ${body.namaProvinsi}`;
+              query = `DELETE FROM sekolah WHERE LOWER(bentuk_pendidikan) IN (${placeholders}) AND nama_provinsi = ? AND migrated_at < ?`;
+              params = [...dbBentukList, searchProv, body.waktuMulai];
             }
 
             const delRes = await env.DB.prepare(query).bind(...params).run();
             stats.dihapus = delRes.meta.changes;
-            
+
             // Ambil data status_sinkronisasi saat ini sebelum direset (untuk dicatat ke log_aktivitas)
             const { results: currentStatsRes } = await env.DB.prepare(`SELECT * FROM status_sinkronisasi WHERE id = 2`).all();
             const current = currentStatsRes[0] || {};
-            
+
             // Catat ke log_aktivitas_provinsi
             await env.DB.prepare(`CREATE TABLE IF NOT EXISTS log_aktivitas_provinsi (id INTEGER PRIMARY KEY AUTOINCREMENT, nama_provinsi TEXT, total_baru INTEGER, total_diperbarui INTEGER, total_dihapus INTEGER, total_tidak_berubah INTEGER, waktu_selesai TIMESTAMPTZ)`).run();
             await env.DB.prepare(`
                INSERT INTO log_aktivitas_provinsi (nama_provinsi, total_baru, total_diperbarui, total_dihapus, total_tidak_berubah, waktu_selesai)
                VALUES (?, ?, ?, ?, ?, datetime('now', '+7 hours'))
             `).bind(
-               body.namaProvinsi || 'SEMUA',
-               current.total_baru || 0,
-               current.total_diperbarui || 0,
-               stats.dihapus || 0,
-               current.total_tidak_berubah || 0
+              body.namaProvinsi || 'SEMUA',
+              current.total_baru || 0,
+              current.total_diperbarui || 0,
+              stats.dihapus || 0,
+              current.total_tidak_berubah || 0
             ).run();
 
             // Hapus log aktivitas yang usianya lebih dari 3 hari
@@ -842,22 +842,22 @@ export default {
             const delRes = await env.DB.prepare(`
               DELETE FROM sekolah WHERE migrated_at < (SELECT waktu_mulai_sinkronisasi FROM status_sinkronisasi WHERE id = 1)
             `).run();
-            
+
             stats.dihapus = delRes.meta.changes;
-            
+
             await env.DB.prepare(`
               UPDATE status_sinkronisasi 
               SET total_dihapus = total_dihapus + ? 
               WHERE id = 1
             `).bind(stats.dihapus).run();
           }
-          
+
           await env.DB.prepare(`
             UPDATE status_sinkronisasi 
             SET total_dihapus = total_dihapus + ? 
             WHERE id = 1
           `).bind(stats.dihapus).run();
-          
+
         } else {
           // Hanya update status untuk Full Sync
           if (!body.customSync) {
@@ -910,13 +910,13 @@ export default {
         const body = await request.json();
         if (body.provinsiList && Array.isArray(body.provinsiList)) {
           await env.DB.prepare(`CREATE TABLE IF NOT EXISTS provinsi_sync_status (nama_provinsi TEXT PRIMARY KEY, terakhir_sukses TIMESTAMPTZ)`).run();
-          
+
           const stmt = env.DB.prepare(`
             INSERT INTO provinsi_sync_status (nama_provinsi, terakhir_sukses)
             VALUES (?, datetime('now', '+7 hours'))
             ON CONFLICT(nama_provinsi) DO UPDATE SET terakhir_sukses = excluded.terakhir_sukses
           `);
-          
+
           const batch = body.provinsiList.map(p => stmt.bind(p));
           await env.DB.batch(batch);
         }
