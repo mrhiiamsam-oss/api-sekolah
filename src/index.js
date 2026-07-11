@@ -798,10 +798,20 @@ export default {
             let query = `DELETE FROM sekolah WHERE LOWER(bentuk_pendidikan) IN (${placeholders}) AND migrated_at < ?`;
             let params = [...dbBentukList, body.waktuMulai];
 
+            if (dbBentukList.length >= 38) {
+              query = `DELETE FROM sekolah WHERE migrated_at < ?`;
+              params = [body.waktuMulai];
+            }
+
             if (body.namaProvinsi && body.namaProvinsi !== 'SEMUA') {
               const searchProv = body.namaProvinsi === 'LUAR NEGERI' ? 'LUAR NEGERI' : `PROV. ${body.namaProvinsi}`;
-              query = `DELETE FROM sekolah WHERE LOWER(bentuk_pendidikan) IN (${placeholders}) AND nama_provinsi = ? AND migrated_at < ?`;
-              params = [...dbBentukList, searchProv, body.waktuMulai];
+              if (dbBentukList.length >= 38) {
+                query = `DELETE FROM sekolah WHERE nama_provinsi = ? AND migrated_at < ?`;
+                params = [searchProv, body.waktuMulai];
+              } else {
+                query = `DELETE FROM sekolah WHERE LOWER(bentuk_pendidikan) IN (${placeholders}) AND nama_provinsi = ? AND migrated_at < ?`;
+                params = [...dbBentukList, searchProv, body.waktuMulai];
+              }
             }
 
             const delRes = await env.DB.prepare(query).bind(...params).run();
