@@ -131,14 +131,17 @@ async function fetchCustomData() {
         // Provinsi yang sudah sinkron (selisih == 0)
         const syncedCodes = compareJson.data.filter(d => d.selisih === 0).map(d => d.kode);
 
-        // Tentukan apakah minggu ke-2 bulan ini (Tanggal 8-14 WIB) untuk melakukan force update berkala
+        // Tentukan apakah minggu ke-2 (Tanggal 8-14 WIB) atau minggu ke-4 (Tanggal 22-28 WIB) bulan ini untuk melakukan force update berkala
         const todayWib = new Date(new Date().getTime() + 7 * 3600 * 1000);
         const dateOfMonth = todayWib.getUTCDate();
         const isSecondWeek = dateOfMonth >= 8 && dateOfMonth <= 14;
+        const isFourthWeek = dateOfMonth >= 22 && dateOfMonth <= 28;
+        const isMandatoryUpdateWeek = isSecondWeek || isFourthWeek;
 
         let primaryTargets = [];
-        if (isSecondWeek) {
-          console.log(`📅 Deteksi minggu ke-2 bulan ini (Tanggal ${dateOfMonth} WIB). Memaksa update wajib penuh untuk jadwal hari ini.`);
+        if (isMandatoryUpdateWeek) {
+          const weekLabel = isSecondWeek ? 'minggu ke-2' : 'minggu ke-4';
+          console.log(`📅 Deteksi ${weekLabel} bulan ini (Tanggal ${dateOfMonth} WIB). Memaksa update wajib penuh untuk jadwal hari ini.`);
           primaryTargets = [...kodeWilayahList];
           skippedProvinces = [];
         } else {

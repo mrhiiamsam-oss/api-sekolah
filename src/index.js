@@ -111,13 +111,17 @@ export default {
 
         const dateOfMonth = dateWIB.getUTCDate();
         const isSecondWeek = dateOfMonth >= 8 && dateOfMonth <= 14;
+        const isFourthWeek = dateOfMonth >= 22 && dateOfMonth <= 28;
+        const isMandatoryUpdateWeek = isSecondWeek || isFourthWeek;
 
-        const secondWeekNoticeHtml = isSecondWeek
+        const weekLabel = isSecondWeek ? 'Minggu Ke-2' : (isFourthWeek ? 'Minggu Ke-4' : '');
+
+        const mandatoryUpdateNoticeHtml = isMandatoryUpdateWeek
           ? `<div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.18); padding: 12px 16px; border-radius: 12px; font-size: 13px; color: #f59e0b; margin-top: 16px; text-align: left; line-height: 1.5; font-weight: 500;">
-              📅 <strong>Minggu Ke-2 Aktif (Tgl ${dateOfMonth} WIB):</strong> Mode Update Wajib Penuh aktif. Provinsi terjadwal hari ini akan disinkronkan secara total tanpa dilewati.
+              📅 <strong>${weekLabel} Aktif (Tgl ${dateOfMonth} WIB):</strong> Mode Update Wajib Penuh aktif. Provinsi terjadwal hari ini akan disinkronkan secara total tanpa dilewati.
              </div>`
           : `<div style="background: rgba(34, 197, 94, 0.04); border: 1px solid rgba(34, 197, 94, 0.12); padding: 12px 16px; border-radius: 12px; font-size: 13px; color: var(--success); margin-top: 16px; text-align: left; line-height: 1.5; font-weight: 500;">
-              ⚡️ <strong>Mode Smart Sync Aktif:</strong> Provinsi terjadwal hari ini yang sudah sinkron (selisih 0) akan dilewati otomatis. Update wajib berikutnya pada tanggal 8-14.
+              ⚡️ <strong>Mode Smart Sync Aktif:</strong> Provinsi terjadwal hari ini yang sudah sinkron (selisih 0) akan dilewati otomatis. Update wajib berikutnya pada tanggal 8-14 (Minggu ke-2) atau 22-28 (Minggu ke-4).
              </div>`;
 
         const provSyncMap = {};
@@ -574,7 +578,7 @@ export default {
         <span>${progressPercent}% Selesai</span>
         <span>Data: ${totalSynced} / ${totalEstimasi}</span>
       </div>
-      ${secondWeekNoticeHtml}
+      ${mandatoryUpdateNoticeHtml}
     </div>
     
     <h1 id="main-title">Sekolah Sync Dashboard ${isCustom ? '<span style="color: #f59e0b; font-size: 14px; vertical-align: middle; background: rgba(245, 158, 11, 0.15); padding: 4px 10px; border-radius: 20px;">Custom</span>' : '<span style="color: var(--primary-light); font-size: 14px; vertical-align: middle; background: rgba(99, 102, 241, 0.15); padding: 4px 10px; border-radius: 20px;">Full</span>'}</h1>
