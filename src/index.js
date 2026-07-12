@@ -184,12 +184,12 @@ export default {
         
         let activeProvince = null;
         let isActive = false;
-        if (statusData && statusData.updated_at) {
-           const updatedAt = new Date(statusData.updated_at.replace(' ', 'T') + '+07:00').getTime();
+        if (row2 && row2.updated_at) {
+           const updatedAt = new Date(row2.updated_at.replace(' ', 'T') + '+07:00').getTime();
            if (Date.now() - updatedAt < 5 * 60000) {
              isActive = true;
-             if (statusData.bentuk_aktif) {
-               const match = statusData.bentuk_aktif.match(/\((.*?)\)/);
+             if (row2.bentuk_aktif) {
+               const match = row2.bentuk_aktif.match(/\((.*?)\)/);
                if (match) activeProvince = match[1];
              }
            }
