@@ -8,7 +8,6 @@ on:
         type: string
         default: ''
   repository_dispatch:
-    types: [trigger-cron]
 
 concurrency:
   group: "sekolah-sync"
