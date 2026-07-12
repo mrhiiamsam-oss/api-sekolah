@@ -176,18 +176,18 @@ async function fetchCustomData() {
         // 2. Yang belum pernah sukses (belum sinkron) diprioritaskan.
         // 3. Yang sudah di sinkron tapi ada datanya berbeda diletakkan di akhir prioritas, bergiliran (yang terlama duluan).
         diffCodes.sort((a, b) => {
-          const aIsDifferent = (Math.abs(a.selisih) > 0 && !a.is_sinkron_walau_selisih) ? 1 : 0;
-          const bIsDifferent = (Math.abs(b.selisih) > 0 && !b.is_sinkron_walau_selisih) ? 1 : 0;
-          
-          if (aIsDifferent !== bIsDifferent) {
-             return bIsDifferent - aIsDifferent; // 1 (berbeda) duluan
-          }
-
           const aHasSynced = a.terakhir_sukses ? 1 : 0;
           const bHasSynced = b.terakhir_sukses ? 1 : 0;
           
           if (aHasSynced !== bHasSynced) {
             return aHasSynced - bHasSynced; // 0 (belum sinkron) duluan
+          }
+
+          const aIsDifferent = (Math.abs(a.selisih) > 0 && !a.is_sinkron_walau_selisih) ? 1 : 0;
+          const bIsDifferent = (Math.abs(b.selisih) > 0 && !b.is_sinkron_walau_selisih) ? 1 : 0;
+          
+          if (aIsDifferent !== bIsDifferent) {
+             return bIsDifferent - aIsDifferent; // 1 (berbeda) duluan
           }
           
           if (aHasSynced && bHasSynced) {

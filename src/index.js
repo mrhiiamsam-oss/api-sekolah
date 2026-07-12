@@ -224,9 +224,29 @@ export default {
            });
         } else {
           diffData.sort((a, b) => {
+            const aHasSynced = a.terakhir_sukses ? 1 : 0;
+            const bHasSynced = b.terakhir_sukses ? 1 : 0;
+            
+            if (aHasSynced !== bHasSynced) {
+              return aHasSynced - bHasSynced; // 0 (belum sinkron) duluan
+            }
+
+            const aIsDifferent = (Math.abs(a.selisih) > 0 && !a.is_sinkron_walau_selisih) ? 1 : 0;
+            const bIsDifferent = (Math.abs(b.selisih) > 0 && !b.is_sinkron_walau_selisih) ? 1 : 0;
+            
+            if (aIsDifferent !== bIsDifferent) {
+               return bIsDifferent - aIsDifferent; // 1 (berbeda) duluan
+            }
+            
+            if (aHasSynced && bHasSynced) {
+               const timeA = new Date(a.terakhir_sukses).getTime();
+               const timeB = new Date(b.terakhir_sukses).getTime();
+               if (timeA !== timeB) return timeA - timeB; // Terlama duluan agar bergiliran
+            }
+
             const maxDiffA = Math.abs(a.selisih);
             const maxDiffB = Math.abs(b.selisih);
-            return maxDiffB - maxDiffA;
+            return maxDiffB - maxDiffA; // Sisanya urutkan berdasarkan selisih terbesar
           });
         }
 
