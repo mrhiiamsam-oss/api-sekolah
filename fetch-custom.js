@@ -275,7 +275,9 @@ async function fetchCustomData() {
     const namaWilayah = kodeWilayah === "360" ? "SEMUA" : (PROVINCES[kodeWilayah] || kodeWilayah);
     
     if (kodeWilayah !== previousProv) {
-      currentProvinceStarted = false;
+      // Hanya benar-benar START BARU jika offset === 0 dan ini adalah bentukPendidikan PERTAMA dari provinsi tersebut!
+      const isVeryBeginningOfProvince = (offset === 0) && (taskIndex === tasks.findIndex(t => t.prov === kodeWilayah));
+      currentProvinceStarted = !isVeryBeginningOfProvince; 
       previousProv = kodeWilayah;
       
       try {

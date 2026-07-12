@@ -163,8 +163,19 @@ export default {
             return `
                 <tr class="${trClass}" style="border-bottom: 1px solid rgba(255,255,255,0.02); ${displayStyle}">
                   <td style="padding: 8px;">${d.nama} <div style="font-size: 10px; color: var(--text-muted)">Kode: ${d.kode}</div></td>
-                  <td style="padding: 8px; text-align: center; color: var(--info);">${d.total_api.toLocaleString('id-ID')}</td>
-                  <td style="padding: 8px; text-align: center; color: var(--primary-light);">${d.total_db.toLocaleString('id-ID')}</td>
+                  <td style="padding: 8px; text-align: center; color: var(--info);">
+                    ${d.total_api.toLocaleString('id-ID')}
+                    ${(d.tanpa_bentuk > 0 || d.tanpa_jenjang > 0 || d.raw_selisih > 0) ? `
+                      <div style="font-size: 10px; color: #f87171; margin-top: 4px; line-height: 1.4;">
+                        ${d.raw_selisih > 0 ? `⚠️ Indikasi NPSN Ganda/Kosong: ${d.raw_selisih}<br>` : ''}
+                        ${d.tanpa_bentuk > 0 ? `Bentuk Kosong: ${d.tanpa_bentuk}<br>` : ''}
+                        ${d.tanpa_jenjang > 0 ? `Jenjang Kosong: ${d.tanpa_jenjang}` : ''}
+                      </div>
+                    ` : ''}
+                  </td>
+                  <td style="padding: 8px; text-align: center; color: var(--primary-light);">
+                    ${d.total_db.toLocaleString('id-ID')}
+                  </td>
                   <td style="padding: 8px; text-align: center; color: ${selisihColor}; font-weight: bold;">${d.selisih > 0 ? '+' : ''}${d.selisih.toLocaleString('id-ID')}</td>
                   <td style="padding: 8px; text-align: center; color: ${selisihColor}; font-size: 11px;">${statusIcon}</td>
                 </tr>
@@ -702,7 +713,15 @@ export default {
         const apiData = await Promise.all(promises);
 
         // Fetch dari DB
-        const { results: dbRes } = await env.DB.prepare('SELECT nama_provinsi as provinsi, COUNT(*) as total_db FROM sekolah GROUP BY nama_provinsi').all();
+        const { results: dbRes } = await env.DB.prepare(`
+          SELECT 
+            nama_provinsi as provinsi, 
+            COUNT(*) as total_db,
+            SUM(CASE WHEN bentuk_pendidikan IS NULL OR bentuk_pendidikan = '' OR bentuk_pendidikan = '-' THEN 1 ELSE 0 END) as tanpa_bentuk,
+            SUM(CASE WHEN jenjang_pendidikan IS NULL OR jenjang_pendidikan = '' OR jenjang_pendidikan = '-' THEN 1 ELSE 0 END) as tanpa_jenjang
+          FROM sekolah 
+          GROUP BY nama_provinsi
+        `).all();
 
         const cleanName = (name) => {
           if (!name) return "";
@@ -712,7 +731,11 @@ export default {
 
         const dbMap = {};
         dbRes.forEach(r => {
-          dbMap[cleanName(r.provinsi)] = r.total_db;
+          dbMap[cleanName(r.provinsi)] = {
+            total_db: r.total_db,
+            tanpa_bentuk: r.tanpa_bentuk || 0,
+            tanpa_jenjang: r.tanpa_jenjang || 0
+          };
         });
 
         const API_DUPLICATES = {
@@ -722,9 +745,11 @@ export default {
         const comparison = apiData.map(d => {
           const duplicateOffset = API_DUPLICATES[d.kode] || 0;
           const adjustedTotalApi = d.total_api - duplicateOffset;
-          const total_db = dbMap[cleanName(d.nama)] || 0;
+          const dbData = dbMap[cleanName(d.nama)] || { total_db: 0, tanpa_bentuk: 0, tanpa_jenjang: 0 };
+          const total_db = dbData.total_db;
           const selisih = adjustedTotalApi - total_db;
-          return { ...d, total_api: adjustedTotalApi, total_db, selisih };
+          const raw_selisih = d.total_api - total_db;
+          return { ...d, total_api: adjustedTotalApi, total_db, tanpa_bentuk: dbData.tanpa_bentuk, tanpa_jenjang: dbData.tanpa_jenjang, selisih, raw_selisih };
         });
 
         comparison.sort((a, b) => {
