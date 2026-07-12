@@ -182,6 +182,19 @@ export default {
         const SISA_KUOTA = Math.max(0, BATAS_AMAN - syncedToday);
         let runningTotalEstimasi = 0;
         
+        let activeProvince = null;
+        let isActive = false;
+        if (statusData && statusData.updated_at) {
+           const updatedAt = new Date(statusData.updated_at.replace(' ', 'T') + '+07:00').getTime();
+           if (Date.now() - updatedAt < 5 * 60000) {
+             isActive = true;
+             if (statusData.bentuk_aktif) {
+               const match = statusData.bentuk_aktif.match(/\((.*?)\)/);
+               if (match) activeProvince = match[1];
+             }
+           }
+        }
+        
         const queueHtml = `
           <h2 style="font-size: 16px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
             <span style="font-size: 20px;">🤖</span> Antrean Smart Sync (Otomatis)
@@ -215,7 +228,11 @@ export default {
                     runningTotalEstimasi += d.total_api;
                   }
                   
-                  const statusLabel = isToday ? '<span style="color: var(--warning); font-weight: 600;">⏳ Dieksekusi Hari Ini</span>' : '<span style="color: var(--text-muted);">Antre Besok</span>';
+                  let statusLabel = isToday ? '<span style="color: var(--warning); font-weight: 600;">⏳ Dieksekusi Hari Ini</span>' : '<span style="color: var(--text-muted);">Antre Besok</span>';
+                  
+                  if (isActive && activeProvince === d.nama) {
+                     statusLabel = '<span style="color: var(--warning); font-weight: 600;">🔄 Proses Sinkron</span>';
+                  }
                   
                   return `
                     <tr style="border-bottom: 1px solid rgba(255,255,255,0.02);">
