@@ -62,4 +62,5 @@ jobs:
           PILIHAN_BENTUK: "Semua"
           PILIHAN_PROVINSI: ${{ env.TARGET_PROVINSI }}
           MULAI_DARI_AWAL: "true"
+          IS_CRON_SCHEDULE: "true"
         run: node fetch-custom.js

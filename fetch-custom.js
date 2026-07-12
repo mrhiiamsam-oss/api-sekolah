@@ -78,10 +78,12 @@ async function fetchCustomData() {
   const argBentuk = process.env.PILIHAN_BENTUK || "Semua";
   const argProvinsi = (process.env.PILIHAN_PROVINSI || "Semua").trim().toUpperCase();
   const mulaiDariAwal = process.env.MULAI_DARI_AWAL === 'true';
+  const isCronSchedule = process.env.IS_CRON_SCHEDULE === 'true';
 
   console.log(`Menjalankan sinkronisasi khusus...`);
   console.log(`- Bentuk Sekolah: ${argBentuk}`);
   console.log(`- Provinsi: ${argProvinsi}`);
+  console.log(`- Mode Cron: ${isCronSchedule}`);
 
   const bentukList = BENTUK_GROUP[argBentuk] || BENTUK_GROUP["Semua"];
   
@@ -135,6 +137,11 @@ async function fetchCustomData() {
         const weekOfMonth = Math.ceil((currentDate.getDate() + dayOfWeek - 1) / 7);
         const isMandatoryUpdateWeek = weekOfMonth === 2 || weekOfMonth === 4;
 
+        if (isCronSchedule && !isMandatoryUpdateWeek) {
+            console.log("🌟 Mode Smart Sync Global aktif! Mengabaikan jadwal harian dan memprioritaskan selisih terbesar dari SELURUH provinsi.");
+            kodeWilayahList = Object.keys(PROVINCES);
+        }
+
         const diffCodes = compareJson.data.filter(d => {
           if (!kodeWilayahList.includes(d.kode)) return false;
           
@@ -156,8 +163,10 @@ async function fetchCustomData() {
         // Kuota aman penulisan baris per hari untuk Cloudflare D1 Free (Limit ~100k write/hari).
         const BATAS_AMAN_DATA_PER_HARI = 70000; 
         
-        let totalDataSaatIni = 0;
+        let totalDataSaatIni = compareJson.synced_today || 0;
         let finalTargets = [];
+
+        console.log(`📊 Kuota yang sudah terpakai hari ini: ${totalDataSaatIni.toLocaleString('id-ID')} / ${BATAS_AMAN_DATA_PER_HARI.toLocaleString('id-ID')}`);
 
         // Urutkan provinsi berdasarkan jumlah absolute selisih dari terbesar ke terkecil
         // Agar yang paling parah perbedaannya segera dieksekusi.
@@ -171,9 +180,9 @@ async function fetchCustomData() {
           if (totalDataSaatIni + p.total_api <= BATAS_AMAN_DATA_PER_HARI) {
             finalTargets.push(p.kode);
             totalDataSaatIni += p.total_api;
-          } else if (finalTargets.length === 0) {
-            // Jika satu provinsi saja sudah melebihi 70.000 (contoh Jawa Barat),
-            // kita harus tetap mengeksekusinya agar tidak macet selamanya.
+          } else if (finalTargets.length === 0 && totalDataSaatIni < BATAS_AMAN_DATA_PER_HARI) {
+            // Jika kita belum menambahkan target sama sekali, DAN kuota harian BELUM sepenuhnya habis.
+            // Kita eksekusi item pertama meskipun akan sedikit melebihi limit.
             finalTargets.push(p.kode);
             totalDataSaatIni += p.total_api;
             break;

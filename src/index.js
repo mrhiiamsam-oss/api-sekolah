@@ -139,20 +139,20 @@ export default {
             
             const warnings = [];
             if (d.raw_selisih > 0) warnings.push(`⚠️ Indikasi NPSN Ganda/Kosong: ${d.raw_selisih}`);
-            const warningHtml = warnings.length > 0 ? `<div style="font-size: 10px; color: #f87171; margin-top: 4px; line-height: 1.4;">${warnings.join('<br>')}</div>` : '';
+            const warningHtml = warnings.length > 0 ? `<div style="font-size: 11px; font-weight: 600; color: var(--danger); margin-top: 6px; line-height: 1.4;">${warnings.join('<br>')}</div>` : '';
 
             return `
-                <tr class="${trClass}" style="border-bottom: 1px solid rgba(255,255,255,0.02); ${displayStyle}">
-                  <td style="padding: 8px;">${d.nama} <div style="font-size: 10px; color: var(--text-muted)">Kode: ${d.kode}</div></td>
-                  <td style="padding: 8px; text-align: center; color: var(--info);">
+                <tr class="${trClass}" style="border-bottom: 1px solid var(--border); ${displayStyle}">
+                  <td style="padding: 12px 8px; font-weight: 600; color: var(--text);">${d.nama} <div style="font-size: 11px; color: var(--text-muted); font-weight: normal; margin-top: 4px;">Kode: ${d.kode}</div></td>
+                  <td style="padding: 12px 8px; text-align: center; color: var(--info); font-weight: 600; font-size: 14px;">
                     ${d.total_api.toLocaleString('id-ID')}
                     ${warningHtml}
                   </td>
-                  <td style="padding: 8px; text-align: center; color: var(--primary-light);">
+                  <td style="padding: 12px 8px; text-align: center; color: var(--primary-light); font-weight: 600; font-size: 14px;">
                     ${d.total_db.toLocaleString('id-ID')}
                   </td>
-                  <td style="padding: 8px; text-align: center; color: ${selisihColor}; font-weight: bold;">${d.selisih > 0 ? '+' : ''}${d.selisih.toLocaleString('id-ID')}</td>
-                  <td style="padding: 8px; text-align: center; color: ${selisihColor}; font-size: 11px;">${statusIcon}</td>
+                  <td style="padding: 12px 8px; text-align: center; color: ${selisihColor}; font-weight: bold; font-size: 14px;">${d.selisih > 0 ? '+' : ''}${d.selisih.toLocaleString('id-ID')}</td>
+                  <td style="padding: 12px 8px; text-align: center; color: ${selisihColor}; font-size: 12px; font-weight: 600;">${statusIcon}</td>
                 </tr>
               `;
           }).join('');
@@ -164,12 +164,12 @@ export default {
           const totalSelisih = sumTotalApi - sumTotalDb;
           const totalColor = totalSelisih === 0 ? 'var(--success)' : 'var(--danger)';
           compareHtml += `
-             <tr class="hidden-row" style="display: none; border-top: 2px solid var(--border); font-weight: bold; background: rgba(0,0,0,0.2);">
-               <td style="padding: 12px 8px;">TOTAL KESELURUHAN</td>
-               <td style="padding: 12px 8px; text-align: center; color: var(--info);">${sumTotalApi.toLocaleString('id-ID')}</td>
-               <td style="padding: 12px 8px; text-align: center; color: var(--primary-light);">${sumTotalDb.toLocaleString('id-ID')}</td>
-               <td style="padding: 12px 8px; text-align: center; color: ${totalColor};">${totalSelisih > 0 ? '+' : ''}${totalSelisih.toLocaleString('id-ID')}</td>
-               <td style="padding: 12px 8px; text-align: center; font-size: 11px;">${diffCount} Provinsi Berselisih</td>
+             <tr class="hidden-row" style="display: none; border-top: 2px solid var(--border); font-weight: bold; background: rgba(0,0,0,0.03);">
+               <td style="padding: 12px 8px; color: var(--text);">TOTAL KESELURUHAN</td>
+               <td style="padding: 12px 8px; text-align: center; color: var(--info); font-size: 14px;">${sumTotalApi.toLocaleString('id-ID')}</td>
+               <td style="padding: 12px 8px; text-align: center; color: var(--primary-light); font-size: 14px;">${sumTotalDb.toLocaleString('id-ID')}</td>
+               <td style="padding: 12px 8px; text-align: center; color: ${totalColor}; font-size: 14px;">${totalSelisih > 0 ? '+' : ''}${totalSelisih.toLocaleString('id-ID')}</td>
+               <td style="padding: 12px 8px; text-align: center; font-size: 12px;">${diffCount} Provinsi Berselisih</td>
              </tr>
            `;
         } else {
@@ -192,22 +192,33 @@ export default {
           7: ["KALIMANTAN BARAT", "KALIMANTAN SELATAN", "KALIMANTAN TENGAH", "NUSA TENGGARA TIMUR", "NUSA TENGGARA BARAT", "LUAR NEGERI", "BALI", "BENGKULU"]
         };
         const currentDayOfWeek = currentDate.getDay() || 7;
+        const nextDayOfWeek = (currentDayOfWeek % 7) + 1;
         const todaySchedule = SCHEDULE[currentDayOfWeek];
+        const tomorrowSchedule = SCHEDULE[nextDayOfWeek];
 
         const todayDateWIB = currentDate.toISOString().split('T')[0];
         const diffData = compareCache && compareCache.value ? compareCache.value.filter(d => {
-          if (d.terakhir_sukses && d.terakhir_sukses.split(' ')[0] === todayDateWIB) return false;
+          const lastSuksesMs = provSyncMap[d.nama];
+          d.isSyncedToday = lastSuksesMs && new Date(lastSuksesMs).toISOString().split('T')[0] === todayDateWIB;
           
           if (isMandatoryUpdateWeek) {
-            return todaySchedule.includes(d.nama);
+            return todaySchedule.includes(d.nama) || tomorrowSchedule.includes(d.nama);
           } else {
+            if (d.isSyncedToday) return false;
             if (Math.abs(d.selisih) === 0 && Math.abs(d.raw_selisih || 0) === 0) return false;
             return true;
           }
         }) : [];
         
         if (isMandatoryUpdateWeek) {
-           diffData.sort((a, b) => todaySchedule.indexOf(a.nama) - todaySchedule.indexOf(b.nama));
+           diffData.sort((a, b) => {
+             const aIsToday = todaySchedule.includes(a.nama);
+             const bIsToday = todaySchedule.includes(b.nama);
+             if (aIsToday && !bIsToday) return -1;
+             if (!aIsToday && bIsToday) return 1;
+             if (aIsToday && bIsToday) return todaySchedule.indexOf(a.nama) - todaySchedule.indexOf(b.nama);
+             return tomorrowSchedule.indexOf(a.nama) - tomorrowSchedule.indexOf(b.nama);
+           });
         } else {
            diffData.sort((a, b) => {
              const maxDiffA = Math.max(Math.abs(a.selisih), Math.abs(a.raw_selisih || 0));
@@ -217,7 +228,19 @@ export default {
         }
 
         const BATAS_AMAN = 70000;
-        const syncedToday = compareCache && compareCache.synced_today ? compareCache.synced_today : 0;
+        let syncedToday = 0;
+        try {
+          const { results: syncedTodayRes } = await env.DB.prepare("SELECT SUM(total_baru + total_diperbarui + total_tidak_berubah) as total FROM log_aktivitas_provinsi WHERE DATE(waktu_selesai) = DATE('now', '+7 hours')").all();
+          syncedToday = syncedTodayRes[0]?.total || 0;
+        } catch(e) {}
+        
+        if (isCustom && activeRow.updated_at) {
+           const updatedAt = new Date(activeRow.updated_at.replace(' ', 'T') + '+07:00').getTime();
+           if (Date.now() - updatedAt < 5 * 60000) {
+              const currentRunning = (activeRow.total_baru || 0) + (activeRow.total_diperbarui || 0) + (activeRow.total_tidak_berubah || 0);
+              syncedToday += currentRunning;
+           }
+        }
         const SISA_KUOTA = Math.max(0, BATAS_AMAN - syncedToday);
         let runningTotalEstimasi = 0;
         
@@ -237,10 +260,10 @@ export default {
         let bannerHtml = '';
         if (isMandatoryUpdateWeek) {
           bannerHtml = `
-            <div style="background: rgba(255, 193, 7, 0.1); border: 1px solid var(--warning); padding: 12px; border-radius: 8px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
+            <div style="background: rgba(255, 193, 7, 0.1); border: 1px solid var(--warning); padding: 12px; border-radius: 8px; margin-top: 24px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
               <span style="font-size: 24px;">📅</span>
               <div>
-                <div style="color: var(--warning); font-weight: 600; font-size: 14px;">Pembaruan Menyeluruh Aktif! (Minggu ke-${weekOfMonth})</div>
+                <div style="color: #f97316; font-weight: 600; font-size: 14px;">Pembaruan Menyeluruh Aktif! (Minggu ke-${weekOfMonth})</div>
                 <div style="color: var(--text-muted); font-size: 12px; margin-top: 2px;">Jadwal hari ini (Hari ke-${currentDayOfWeek}): ${todaySchedule.join(', ')}</div>
               </div>
             </div>
@@ -248,20 +271,22 @@ export default {
         }
 
         const queueHtml = `
+          <div id="queue-container">
           ${bannerHtml}
           <h2 style="font-size: 16px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
             <span style="font-size: 20px;">🤖</span> Antrean Smart Sync (Otomatis)
           </h2>
-          <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; overflow: hidden; margin-bottom: 24px;">
-            <div style="padding: 12px 16px; background: rgba(0,0,0,0.2); font-size: 13px; color: var(--text-muted); border-bottom: 1px solid rgba(255,255,255,0.05); line-height: 1.5;">
+          <div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 24px;">
+            <div style="padding: 12px 16px; background: rgba(0,0,0,0.03); font-size: 13px; color: var(--text-muted); border-bottom: 1px solid var(--border); line-height: 1.5;">
               Sistem secara cerdas mendeteksi provinsi mana yang butuh pembaruan. Provinsi dengan selisih paling besar akan diprioritaskan. 
               Maksimal <strong>~70.000 data</strong> disinkronisasi setiap harinya untuk menjaga limit <em>database</em>.
               <br>Kuota Harian Digunakan: <strong style="color: ${SISA_KUOTA <= 0 ? 'var(--danger)' : 'var(--warning)'}">${syncedToday.toLocaleString('id-ID')} / 70.000</strong>
               ${SISA_KUOTA <= 0 ? '<span style="color: var(--danger); font-weight: bold; margin-left: 8px;">⚠️ KUOTA PENUH, SISA ANTREAN DITUNDA BESOK</span>' : ''}
             </div>
-            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <div style="overflow-x: auto;">
+            <table style="width: 100%; min-width: 500px; border-collapse: collapse; font-size: 13px;">
               <thead>
-                <tr style="background: rgba(255,255,255,0.05); color: var(--text-muted); text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">
+                <tr style="background: rgba(0,0,0,0.04); color: var(--text-muted); text-transform: uppercase; font-size: 11px; font-weight: 600; letter-spacing: 0.5px;">
                   <th style="padding: 12px; text-align: left;">Urutan Prioritas</th>
                   <th style="padding: 12px; text-align: left;">Provinsi</th>
                   <th style="padding: 12px; text-align: center;">Estimasi Data</th>
@@ -273,31 +298,41 @@ export default {
                   <tr><td colspan="4" style="padding: 24px; text-align: center; color: var(--success); font-weight: 600;">✅ Semua provinsi sudah sinkron sepenuhnya!</td></tr>
                 ` : diffData.map((d, i) => {
                   let isToday = false;
-                  if (runningTotalEstimasi + d.total_api <= SISA_KUOTA) {
-                    isToday = true;
-                    runningTotalEstimasi += d.total_api;
-                  } else if (i === 0) {
-                    isToday = true;
-                    runningTotalEstimasi += d.total_api;
+                  
+                  if (!d.isSyncedToday) {
+                    const isFirstUnsynced = !diffData.slice(0, i).some(prev => !prev.isSyncedToday);
+                    if (runningTotalEstimasi + d.total_api <= SISA_KUOTA) {
+                      isToday = true;
+                      runningTotalEstimasi += d.total_api;
+                    } else if (isFirstUnsynced && SISA_KUOTA > 0) {
+                      isToday = true;
+                      runningTotalEstimasi += d.total_api;
+                    }
                   }
                   
                   let statusLabel = isToday ? '<span style="color: var(--warning); font-weight: 600;">⏳ Dieksekusi Hari Ini</span>' : '<span style="color: var(--text-muted);">Antre Besok</span>';
                   
-                  if (isActive && activeProvince === d.nama) {
-                     statusLabel = '<span style="color: var(--warning); font-weight: 600;">🔄 Proses Sinkron</span>';
+                  let rowStyle = 'border-bottom: 1px solid var(--border);';
+                  if (d.isSyncedToday) {
+                     statusLabel = '<span style="color: var(--success); font-weight: 600;">✅ Selesai Hari Ini</span>';
+                  } else if (isActive && activeProvince === d.nama) {
+                     statusLabel = '<span style="color: var(--warning); font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 4px;"><span class="spin-icon">🔄</span> Proses Sinkron</span>';
+                     rowStyle = 'border-bottom: 1px solid var(--border); background: rgba(245, 158, 11, 0.15);';
                   }
                   
                   return `
-                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.02);">
-                      <td style="padding: 12px; text-align: left; font-weight: bold; color: var(--text-color);">#${i + 1}</td>
-                      <td style="padding: 12px; text-align: left;">${d.nama}</td>
-                      <td style="padding: 12px; text-align: center; color: var(--info);">${d.total_api.toLocaleString('id-ID')}</td>
-                      <td style="padding: 12px; text-align: center;">${statusLabel}</td>
+                    <tr style="${rowStyle}">
+                      <td style="padding: 12px; text-align: left; font-weight: bold; color: var(--text); font-size: 14px;">${i + 1}</td>
+                      <td style="padding: 12px; text-align: left; font-weight: 600; color: var(--text); font-size: 14px;">${d.nama}</td>
+                      <td style="padding: 12px; text-align: center; color: var(--info); font-weight: 600; font-size: 14px;">${d.total_api.toLocaleString('id-ID')}</td>
+                      <td style="padding: 12px; text-align: center; font-size: 13px;">${statusLabel}</td>
                     </tr>
                   `;
                 }).join('')}
               </tbody>
             </table>
+            </div>
+          </div>
           </div>
         `;
 
@@ -329,18 +364,18 @@ export default {
 
         let logHtml = logAktivitasList.length > 0 ? logAktivitasList.map(log => {
           const totalData = log.total_baru + log.total_diperbarui + log.total_tidak_berubah;
-          return `<div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 12px; font-size: 13px;">
+          return `<div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 12px; font-size: 13px;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-              <strong style="color: #e5e7eb;">${log.nama_provinsi}</strong>
-              <span style="color: var(--text-muted); font-size: 11px;">${log.waktu_selesai}</span>
+              <strong style="color: var(--text); font-size: 14px;">${log.nama_provinsi}</strong>
+              <span style="color: var(--text-muted); font-size: 12px; font-weight: 500;">${log.waktu_selesai}</span>
             </div>
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; text-align: center; font-size: 12px;">
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; text-align: center; font-size: 13px; font-weight: 600;">
               <div style="color: var(--success);">${log.total_baru} Baru</div>
               <div style="color: var(--info);">${log.total_diperbarui} Update</div>
               <div style="color: var(--danger);">${log.total_dihapus} Hapus</div>
               <div style="color: var(--text-muted);">${log.total_tidak_berubah} Tetap</div>
             </div>
-            <div style="text-align: left; margin-top: 8px; font-weight: 600; color: #d1d5db; border-top: 1px solid var(--border); padding-top: 8px;">Total Data: ${totalData}</div>
+            <div style="text-align: left; margin-top: 10px; font-weight: 700; font-size: 14px; color: var(--text); border-top: 1px solid var(--border); padding-top: 10px;">Total Data: ${totalData}</div>
           </div>`;
         }).join('') : '<div style="color: var(--text-muted); font-size: 13px;">Belum ada log aktivitas.</div>';
 
@@ -353,14 +388,14 @@ export default {
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔄</text></svg>">
   <style>
     :root {
-      --bg: #0b0c10; --card: rgba(255, 255, 255, 0.03); --border: rgba(255, 255, 255, 0.05);
-      --text: #e5e7eb; --text-muted: #9ca3af; --primary: #6366f1; --primary-light: #818cf8;
-      --success: #4ade80; --info: #60a5fa; --danger: #f87171;
+      --bg: #f8fafc; --card: rgba(255, 255, 255, 0.85); --border: rgba(0, 0, 0, 0.1);
+      --text: #0f172a; --text-muted: #64748b; --primary: #4f46e5; --primary-light: #6366f1;
+      --success: #10b981; --info: #3b82f6; --danger: #ef4444; --warning: #f59e0b;
     }
     * { box-sizing: border-box; }
     body {
       font-family: 'Inter', -apple-system, sans-serif;
-      background: radial-gradient(circle at top left, #12131a, var(--bg));
+      background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
       color: var(--text);
       display: flex; justify-content: center; align-items: center;
       min-height: 100vh; margin: 0; padding: 16px;
@@ -388,15 +423,15 @@ export default {
     @media (min-width: 600px) {
       .grid { grid-template-columns: repeat(4, 1fr); }
     }
-    .stat-box { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
-    .stat-val { font-size: 20px; font-weight: 700; color: #fff; }
+    .stat-box { background: rgba(0,0,0,0.02); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+    .stat-val { font-size: 20px; font-weight: 700; color: var(--text); }
     .stat-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
     
     .progress-bar { height: 6px; background: var(--border); border-radius: 9999px; overflow: hidden; margin-top: 24px; }
     .progress-fill { height: 100%; background: linear-gradient(90deg, var(--primary), #a855f7); width: ${selesai ? 100 : progressPercent}%; transition: width 0.3s; }
     
     .loader {
-      width: 48px; height: 48px; border: 5px solid #fff; border-bottom-color: transparent;
+      width: 48px; height: 48px; border: 5px solid var(--primary); border-bottom-color: transparent;
       border-radius: 50%; display: block; box-sizing: border-box;
       animation: rotation 1s linear infinite; margin: 0 auto 20px auto;
     }
@@ -577,6 +612,10 @@ export default {
             const newMainInfo = doc.getElementById('main-info');
             if (mainInfo && newMainInfo) mainInfo.innerHTML = newMainInfo.innerHTML;
             
+            const queueContainer = document.getElementById('queue-container');
+            const newQueueContainer = doc.getElementById('queue-container');
+            if (queueContainer && newQueueContainer) queueContainer.innerHTML = newQueueContainer.innerHTML;
+            
             // Restore show all state
             if (isShowAll) {
                const rows = document.querySelectorAll('.hidden-row');
@@ -615,10 +654,10 @@ export default {
     </div>
     
     <h1 id="main-title">Sekolah Sync Dashboard ${isCustom ? '<span style="color: #f59e0b; font-size: 14px; vertical-align: middle; background: rgba(245, 158, 11, 0.15); padding: 4px 10px; border-radius: 20px;">Custom</span>' : '<span style="color: var(--primary-light); font-size: 14px; vertical-align: middle; background: rgba(99, 102, 241, 0.15); padding: 4px 10px; border-radius: 20px;">Full</span>'}</h1>
-    <div id="main-info" style="font-size: 15px; color: #d1d5db; line-height: 1.5;">
-      Bentuk Aktif: <strong style="color: var(--primary-light); text-transform: uppercase;">${bentukBerikutnya}</strong><br>
+    <div id="main-info" style="font-size: 15px; color: var(--text); line-height: 1.5;">
+      Bentuk Aktif: <strong style="color: var(--primary); text-transform: uppercase;">${bentukBerikutnya}</strong><br>
       Offset Saat Ini: <strong>${offsetBerikutnya}</strong><br>
-      Update Terakhir: <strong style="color: #fff;">${activeRow.updated_at || '-'} WIB</strong>
+      Update Terakhir: <strong style="color: var(--text);">${activeRow.updated_at || '-'} WIB</strong>
     </div>
 
     <div class="grid">
@@ -643,7 +682,7 @@ export default {
     ${queueHtml}
     
     <div style="margin-top: 32px; text-align: left;">
-      <h2 style="font-size: 18px; margin-bottom: 16px; color: #fff; font-weight: 600; padding-bottom: 8px; border-bottom: 1px solid var(--border);">Log Aktivitas Terakhir</h2>
+      <h2 style="font-size: 18px; margin-bottom: 16px; color: var(--text); font-weight: 600; padding-bottom: 8px; border-bottom: 1px solid var(--border);">Log Aktivitas Terakhir</h2>
       <div id="log-container" style="display: flex; flex-direction: column; gap: 8px;">
         ${logHtml}
       </div>
@@ -653,20 +692,20 @@ export default {
     <div style="margin-top: 32px; text-align: left;">
       <div id="compare-header-box" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px;">
         <div>
-          <h2 style="font-size: 18px; color: #fff; font-weight: 600; margin: 0 0 4px 0;">Perbandingan Data (Belajar.id vs DB)</h2>
+          <h2 style="font-size: 18px; color: var(--text); font-weight: 600; margin: 0 0 4px 0;">Perbandingan Data (Belajar.id vs DB)</h2>
           <div id="compare-last-checked" style="font-size: 12px; color: var(--text-muted);">Terakhir dicek: ${lastChecked}</div>
         </div>
         ${compareCache && compareCache.value.length > 5 ? `<button id="btn-compare" style="background: var(--primary); color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; transition: background 0.2s;" onclick="toggleComparison()">Tampilkan Semua</button>` : ''}
       </div>
-      <div id="compare-container" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 16px; font-size: 13px; overflow-x: auto;">
+      <div id="compare-container" style="background: rgba(0,0,0,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 16px; font-size: 13px; overflow-x: auto;">
          <table id="compare-table" style="width: 100%; min-width: 550px; border-collapse: collapse;">
            <thead>
-             <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted); text-align: left;">
-               <th style="padding: 8px;">Provinsi</th>
-               <th style="padding: 8px; text-align: center;">Belajar.id</th>
-               <th style="padding: 8px; text-align: center;">Database</th>
-               <th style="padding: 8px; text-align: center;">Selisih</th>
-               <th style="padding: 8px; text-align: center;">Status</th>
+             <tr style="border-bottom: 1px solid var(--border); color: var(--text); font-weight: 600; text-align: left; background: rgba(0,0,0,0.02);">
+               <th style="padding: 12px 8px;">Provinsi</th>
+               <th style="padding: 12px 8px; text-align: center;">Belajar.id</th>
+               <th style="padding: 12px 8px; text-align: center;">Database</th>
+               <th style="padding: 12px 8px; text-align: center;">Selisih</th>
+               <th style="padding: 12px 8px; text-align: center;">Status</th>
              </tr>
            </thead>
            <tbody id="compare-body">${compareHtml}</tbody>
@@ -697,6 +736,12 @@ export default {
 
         // Buat tabel cache_data jika belum ada
         await env.DB.prepare(`CREATE TABLE IF NOT EXISTS cache_data (key TEXT PRIMARY KEY, value TEXT, updated_at TIMESTAMPTZ)`).run();
+        
+        let synced_today = 0;
+        try {
+          const { results: syncedTodayRes } = await env.DB.prepare("SELECT SUM(total_baru + total_diperbarui + total_tidak_berubah) as total FROM log_aktivitas_provinsi WHERE DATE(waktu_selesai) = DATE('now', '+7 hours')").all();
+          synced_today = syncedTodayRes[0]?.total || 0;
+        } catch(e) {}
 
         if (!isCron) {
           const { results } = await env.DB.prepare("SELECT value FROM cache_data WHERE key = 'perbandingan'").all();
@@ -852,7 +897,7 @@ export default {
         }
 
         // Simpan log terakhir provinsi sukses
-        if (body.customSync && body.namaProvinsi && body.namaProvinsi !== 'SEMUA') {
+        if (isFinished && body.customSync && body.namaProvinsi && body.namaProvinsi !== 'SEMUA') {
           await env.DB.prepare(`CREATE TABLE IF NOT EXISTS provinsi_sync_status (nama_provinsi TEXT PRIMARY KEY, terakhir_sukses TIMESTAMPTZ)`).run();
           await env.DB.prepare(`
             INSERT INTO provinsi_sync_status (nama_provinsi, terakhir_sukses)
