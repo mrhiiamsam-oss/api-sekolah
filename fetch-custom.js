@@ -145,7 +145,7 @@ async function fetchCustomData() {
         const diffCodes = compareJson.data.filter(d => {
           if (!kodeWilayahList.includes(d.kode)) return false;
           
-          const isSynced = Math.abs(d.selisih) === 0 && Math.abs(d.raw_selisih || 0) === 0;
+          const isSynced = Math.abs(d.selisih) === 0;
           if (isSynced && !isMandatoryUpdateWeek) return false;
           
           if (d.terakhir_sukses) {
@@ -171,8 +171,8 @@ async function fetchCustomData() {
         // Urutkan provinsi berdasarkan jumlah absolute selisih dari terbesar ke terkecil
         // Agar yang paling parah perbedaannya segera dieksekusi.
         diffCodes.sort((a, b) => {
-          const maxDiffA = Math.max(Math.abs(a.selisih), Math.abs(a.raw_selisih || 0));
-          const maxDiffB = Math.max(Math.abs(b.selisih), Math.abs(b.raw_selisih || 0));
+          const maxDiffA = Math.abs(a.selisih);
+          const maxDiffB = Math.abs(b.selisih);
           return maxDiffB - maxDiffA;
         });
 

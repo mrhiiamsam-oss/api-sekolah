@@ -205,7 +205,7 @@ export default {
             return todaySchedule.includes(d.nama) || tomorrowSchedule.includes(d.nama);
           } else {
             if (d.isSyncedToday) return false;
-            if (Math.abs(d.selisih) === 0 && Math.abs(d.raw_selisih || 0) === 0) return false;
+            if (Math.abs(d.selisih) === 0) return false;
             return true;
           }
         }) : [];
@@ -220,11 +220,11 @@ export default {
              return tomorrowSchedule.indexOf(a.nama) - tomorrowSchedule.indexOf(b.nama);
            });
         } else {
-           diffData.sort((a, b) => {
-             const maxDiffA = Math.max(Math.abs(a.selisih), Math.abs(a.raw_selisih || 0));
-             const maxDiffB = Math.max(Math.abs(b.selisih), Math.abs(b.raw_selisih || 0));
-             return maxDiffB - maxDiffA;
-           });
+          diffData.sort((a, b) => {
+            const maxDiffA = Math.abs(a.selisih);
+            const maxDiffB = Math.abs(b.selisih);
+            return maxDiffB - maxDiffA;
+          });
         }
 
         const BATAS_AMAN = 70000;
@@ -800,11 +800,18 @@ export default {
         };
 
         await env.DB.prepare(`CREATE TABLE IF NOT EXISTS provinsi_sync_status (nama_provinsi TEXT PRIMARY KEY, terakhir_sukses TIMESTAMPTZ)`).run();
-        const { results: syncStatusRes } = await env.DB.prepare('SELECT nama_provinsi, terakhir_sukses FROM provinsi_sync_status').all();
+        
+        try {
+          await env.DB.prepare(`ALTER TABLE provinsi_sync_status ADD COLUMN api_duplicates INTEGER DEFAULT 0`).run();
+        } catch(e) {}
+        
+        const { results: syncStatusRes } = await env.DB.prepare('SELECT nama_provinsi, terakhir_sukses, api_duplicates FROM provinsi_sync_status').all();
         const syncStatusMap = {};
+        const duplicatesMap = {};
         if (syncStatusRes) {
           syncStatusRes.forEach(r => {
             syncStatusMap[cleanName(r.nama_provinsi)] = r.terakhir_sukses;
+            duplicatesMap[cleanName(r.nama_provinsi)] = r.api_duplicates || 0;
           });
         }
 
@@ -820,12 +827,13 @@ export default {
           };
         });
 
-        const API_DUPLICATES = {
-          '250000': 1 // PAPUA memiliki 1 NPSN duplikat di API Belajar.id (SDN PERSIAPAN SUASESO)
-        };
+        // Hapus hardcode API_DUPLICATES, gunakan data dinamis dari duplicatesMap
 
         const comparison = apiData.map(d => {
-          const duplicateOffset = API_DUPLICATES[d.kode] || 0;
+          // Fallback manual jika database belum sempat diisi (misal PAPUA)
+          let duplicateOffset = duplicatesMap[cleanName(d.nama)] || 0;
+          if (d.kode === '250000' && duplicateOffset === 0) duplicateOffset = 1;
+
           const adjustedTotalApi = d.total_api - duplicateOffset;
           const dbData = dbMap[cleanName(d.nama)] || { total_db: 0, tanpa_bentuk: 0, tanpa_jenjang: 0, tanpa_kabupaten: 0, tanpa_kecamatan: 0, tanpa_desa: 0 };
           const total_db = dbData.total_db;
@@ -885,6 +893,10 @@ export default {
         try {
           await env.DB.prepare(`ALTER TABLE status_sinkronisasi ADD COLUMN total_estimasi INTEGER DEFAULT 0`).run();
         } catch (e) { }
+        
+        try {
+          await env.DB.prepare(`ALTER TABLE status_sinkronisasi ADD COLUMN total_tanpa_npsn INTEGER DEFAULT 0`).run();
+        } catch (e) { }
 
         if (dataList && dataList.length > 0) {
           stats = await syncBatch(env.DB, dataList);
@@ -899,11 +911,29 @@ export default {
         // Simpan log terakhir provinsi sukses
         if (isFinished && body.customSync && body.namaProvinsi && body.namaProvinsi !== 'SEMUA') {
           await env.DB.prepare(`CREATE TABLE IF NOT EXISTS provinsi_sync_status (nama_provinsi TEXT PRIMARY KEY, terakhir_sukses TIMESTAMPTZ)`).run();
+          
+          try {
+            await env.DB.prepare(`ALTER TABLE provinsi_sync_status ADD COLUMN api_duplicates INTEGER DEFAULT 0`).run();
+          } catch (e) { }
+
+          // Hitung api_duplicates: (totalEstimasi dari API) - (total_db setelah dihapus) - (total_tanpa_npsn yang di-skip)
+          const { results: currentStatsRes } = await env.DB.prepare(`SELECT total_tanpa_npsn FROM status_sinkronisasi WHERE id = 2`).all();
+          const totalTanpaNpsn = currentStatsRes[0]?.total_tanpa_npsn || 0;
+          
+          const searchProv = body.namaProvinsi === 'LUAR NEGERI' ? 'LUAR NEGERI' : `PROV. ${body.namaProvinsi}`;
+          const { results: dbCountRes } = await env.DB.prepare(`SELECT COUNT(*) as total_db FROM sekolah WHERE nama_provinsi = ?`).bind(searchProv).all();
+          const finalDbCount = dbCountRes[0]?.total_db || 0;
+          
+          let api_duplicates = (customParams.totalEstimasi || 0) - finalDbCount - totalTanpaNpsn;
+          if (api_duplicates < 0) api_duplicates = 0;
+
           await env.DB.prepare(`
-            INSERT INTO provinsi_sync_status (nama_provinsi, terakhir_sukses)
-            VALUES (?, datetime('now', '+7 hours'))
-            ON CONFLICT(nama_provinsi) DO UPDATE SET terakhir_sukses = excluded.terakhir_sukses
-          `).bind(body.namaProvinsi).run();
+            INSERT INTO provinsi_sync_status (nama_provinsi, terakhir_sukses, api_duplicates)
+            VALUES (?, datetime('now', '+7 hours'), ?)
+            ON CONFLICT(nama_provinsi) DO UPDATE SET 
+              terakhir_sukses = excluded.terakhir_sukses,
+              api_duplicates = excluded.api_duplicates
+          `).bind(body.namaProvinsi, api_duplicates).run();
         }
 
         if (isFinished) {
@@ -1004,20 +1034,20 @@ export default {
             const displayBentuk = body.namaProvinsi && body.namaProvinsi !== 'SEMUA' ? `${bentukAktif.toUpperCase()} (${body.namaProvinsi})` : bentukAktif.toUpperCase();
             let resetQuery = '';
             if (body.isStart) {
-              resetQuery = ', total_baru = excluded.total_baru, total_diperbarui = excluded.total_diperbarui, total_tidak_berubah = excluded.total_tidak_berubah, total_dihapus = 0, total_estimasi = excluded.total_estimasi';
+              resetQuery = ', total_baru = excluded.total_baru, total_diperbarui = excluded.total_diperbarui, total_tidak_berubah = excluded.total_tidak_berubah, total_dihapus = 0, total_estimasi = excluded.total_estimasi, total_tanpa_npsn = excluded.total_tanpa_npsn';
             }
             // Upsert for id = 2
             await env.DB.prepare(`
-              INSERT INTO status_sinkronisasi (id, bentuk_aktif, offset_terakhir, total_baru, total_diperbarui, total_tidak_berubah, total_estimasi, updated_at, waktu_selesai_terakhir) 
-              VALUES (2, ?, ?, ?, ?, ?, ?, datetime('now', '+7 hours'), datetime('now'))
+              INSERT INTO status_sinkronisasi (id, bentuk_aktif, offset_terakhir, total_baru, total_diperbarui, total_tidak_berubah, total_estimasi, total_tanpa_npsn, updated_at, waktu_selesai_terakhir) 
+              VALUES (2, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+7 hours'), datetime('now'))
               ON CONFLICT(id) DO UPDATE SET
                 bentuk_aktif = excluded.bentuk_aktif,
                 offset_terakhir = excluded.offset_terakhir,
                 updated_at = excluded.updated_at,
                 waktu_selesai_terakhir = excluded.waktu_selesai_terakhir
-                ${resetQuery ? resetQuery : `, total_baru = status_sinkronisasi.total_baru + excluded.total_baru, total_diperbarui = status_sinkronisasi.total_diperbarui + excluded.total_diperbarui, total_tidak_berubah = status_sinkronisasi.total_tidak_berubah + excluded.total_tidak_berubah, total_estimasi = excluded.total_estimasi`}
+                ${resetQuery ? resetQuery : `, total_baru = status_sinkronisasi.total_baru + excluded.total_baru, total_diperbarui = status_sinkronisasi.total_diperbarui + excluded.total_diperbarui, total_tidak_berubah = status_sinkronisasi.total_tidak_berubah + excluded.total_tidak_berubah, total_estimasi = excluded.total_estimasi, total_tanpa_npsn = status_sinkronisasi.total_tanpa_npsn + excluded.total_tanpa_npsn`}
             `).bind(
-              displayBentuk, offset, stats.baru, stats.diperbarui, stats.tidakBerubah, customParams.totalEstimasi || 0
+              displayBentuk, offset, stats.baru, stats.diperbarui, stats.tidakBerubah, customParams.totalEstimasi || 0, stats.tanpaNpsn || 0
             ).run();
           }
         }
