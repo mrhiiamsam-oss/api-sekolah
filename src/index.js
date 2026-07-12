@@ -129,6 +129,9 @@ export default {
             if (d.selisih === 0) {
               selisihColor = 'var(--success)';
               statusIcon = '✅ Sinkron';
+            } else if (d.is_sinkron_walau_selisih) {
+              selisihColor = 'var(--warning)';
+              statusIcon = '✅ Berbeda';
             } else if (isSyncedToday) {
               selisihColor = 'var(--warning)';
               statusIcon = '✅ Selesai (Ada Data Gagal)';
