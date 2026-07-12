@@ -9,6 +9,8 @@ on:
         default: ''
   repository_dispatch:
     types: [trigger-cron]
+  schedule:
+    - cron: '*/15 * * * *'
 
 concurrency:
   group: "sekolah-sync"
