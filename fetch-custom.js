@@ -126,62 +126,39 @@ async function fetchCustomData() {
     if (compareRes.ok) {
       const compareJson = await compareRes.json();
       if (compareJson.success && compareJson.data) {
-        // Provinsi yang butuh sinkron (selisih != 0)
-        const diffCodes = compareJson.data.filter(d => Math.abs(d.selisih) > 0).map(d => d.kode);
-        // Provinsi yang sudah sinkron (selisih == 0)
-        const syncedCodes = compareJson.data.filter(d => d.selisih === 0).map(d => d.kode);
+        // Cek semua provinsi yang ada selisih (selisih != 0)
+        // Kita gunakan raw_selisih jika ada (untuk mendeteksi npsn ganda/kosong), atau selisih biasa
+        // Kedua hal ini menandakan ketidaksinkronan data.
+        const diffCodes = compareJson.data.filter(d => (Math.abs(d.selisih) > 0 || Math.abs(d.raw_selisih || 0) > 0) && kodeWilayahList.includes(d.kode));
+        const syncedCodes = compareJson.data.filter(d => d.selisih === 0 && (d.raw_selisih || 0) === 0 && kodeWilayahList.includes(d.kode));
 
-        // Tentukan apakah minggu ke-2 (Tanggal 8-14 WIB) atau minggu ke-4 (Tanggal 22-28 WIB) bulan ini untuk melakukan force update berkala
-        const todayWib = new Date(new Date().getTime() + 7 * 3600 * 1000);
-        const dateOfMonth = todayWib.getUTCDate();
-        const isSecondWeek = dateOfMonth >= 8 && dateOfMonth <= 14;
-        const isFourthWeek = dateOfMonth >= 22 && dateOfMonth <= 28;
-        const isMandatoryUpdateWeek = isSecondWeek || isFourthWeek;
-
-        let primaryTargets = [];
-        if (isMandatoryUpdateWeek) {
-          const weekLabel = isSecondWeek ? 'minggu ke-2' : 'minggu ke-4';
-          console.log(`📅 Deteksi ${weekLabel} bulan ini (Tanggal ${dateOfMonth} WIB). Memaksa update wajib penuh untuk jadwal hari ini.`);
-          primaryTargets = [...kodeWilayahList];
-          skippedProvinces = [];
-        } else {
-          // Prioritas 1: Hanya provinsi jadwal hari ini yang butuh sinkron
-          primaryTargets = kodeWilayahList.filter(kode => diffCodes.includes(kode));
-          // Catat provinsi jadwal hari ini yang sudah sinkron (untuk UI dashboard)
-          skippedProvinces = kodeWilayahList.filter(kode => syncedCodes.includes(kode));
-        }
-
-        // Prioritas 2 (SINKRON CERDAS): Provinsi HARI LAIN yang butuh sinkron
-        const secondaryTargets = diffCodes.filter(kode => !kodeWilayahList.includes(kode));
-
-        // Batasi berdasarkan JUMLAH DATA (bukan sekadar jumlah provinsi) untuk mencegah limit D1 Cloudflare.
         // Kuota aman penulisan baris per hari untuk Cloudflare D1 Free (Limit ~100k write/hari).
         const BATAS_AMAN_DATA_PER_HARI = 70000; 
         
         let totalDataSaatIni = 0;
         let finalTargets = [];
 
-        // Fungsi pembantu untuk mencari estimasi total data provinsi
-        const getTotalApi = (kode) => {
-          const p = compareJson.data.find(d => d.kode === kode);
-          return p ? p.total_api : 0;
-        };
+        // Urutkan provinsi berdasarkan jumlah absolute selisih dari terbesar ke terkecil
+        // Agar yang paling parah perbedaannya segera dieksekusi.
+        diffCodes.sort((a, b) => {
+          const maxDiffA = Math.max(Math.abs(a.selisih), Math.abs(a.raw_selisih || 0));
+          const maxDiffB = Math.max(Math.abs(b.selisih), Math.abs(b.raw_selisih || 0));
+          return maxDiffB - maxDiffA;
+        });
 
-        // 1. Masukkan semua target jadwal hari ini terlebih dahulu (Prioritas Utama)
-        for (const kode of primaryTargets) {
-          finalTargets.push(kode);
-          totalDataSaatIni += getTotalApi(kode);
-        }
-
-        // 2. SINKRON CERDAS: Jika kuota data harian masih tersisa, 'pinjam' dari hari lain 
-        // yang muat dimasukkan ke dalam sisa kuota.
-        if (totalDataSaatIni < BATAS_AMAN_DATA_PER_HARI) {
-          for (const kode of secondaryTargets) {
-            const estimasiData = getTotalApi(kode);
-            if (totalDataSaatIni + estimasiData <= BATAS_AMAN_DATA_PER_HARI) {
-              finalTargets.push(kode);
-              totalDataSaatIni += estimasiData;
-            }
+        for (const p of diffCodes) {
+          if (totalDataSaatIni + p.total_api <= BATAS_AMAN_DATA_PER_HARI) {
+            finalTargets.push(p.kode);
+            totalDataSaatIni += p.total_api;
+          } else if (finalTargets.length === 0) {
+            // Jika satu provinsi saja sudah melebihi 70.000 (contoh Jawa Barat),
+            // kita harus tetap mengeksekusinya agar tidak macet selamanya.
+            finalTargets.push(p.kode);
+            totalDataSaatIni += p.total_api;
+            break;
+          } else {
+            // Kuota harian sudah penuh
+            break;
           }
         }
 
@@ -190,16 +167,20 @@ async function fetchCustomData() {
           kodeWilayahList = [];
         } else {
           const targetNames = finalTargets.map(k => k === "350000" ? "LUAR NEGERI" : (PROVINCES[k] || k));
-          console.log(`⚠️ Terdapat ${primaryTargets.length} provinsi jadwal hari ini dan ${finalTargets.length - primaryTargets.length} provinsi pinjaman jadwal lain yang akan disinkron.`);
-          console.log(`🚀 Smart Sync akan menyinkronkan ${finalTargets.length} provinsi [${targetNames.join(', ')}] dengan total estimasi ~${totalDataSaatIni.toLocaleString('id-ID')} data (Batas Aman: ${BATAS_AMAN_DATA_PER_HARI.toLocaleString('id-ID')} per hari).`);
+          console.log(`🚀 Smart Sync Cerdas mendeteksi ${diffCodes.length} provinsi dengan data tidak sinkron.`);
+          console.log(`   Memilih ${finalTargets.length} provinsi [${targetNames.join(', ')}] untuk disinkronisasi hari ini dengan estimasi ~${totalDataSaatIni.toLocaleString('id-ID')} data.`);
+          if (diffCodes.length > finalTargets.length) {
+             console.log(`   ⚠️ Sisa ${diffCodes.length - finalTargets.length} provinsi akan otomatis antre untuk dieksekusi besok karena batas aman harian (${BATAS_AMAN_DATA_PER_HARI.toLocaleString('id-ID')} data).`);
+          }
           kodeWilayahList = finalTargets;
         }
 
         // Tandai provinsi yang di-skip karena sudah sinkron ke database agar mendapat centang hijau di Dashboard
+        skippedProvinces = syncedCodes.map(d => d.kode);
         if (skippedProvinces.length > 0) {
           const provNames = skippedProvinces.map(k => k === "350000" ? "LUAR NEGERI" : (PROVINCES[k] || "")).filter(n => n);
           if (provNames.length > 0) {
-            console.log(`Menandai ${provNames.length} provinsi sebagai sinkron di database (agar UI Dashboard terceklis)...`);
+            console.log(`Menandai ${provNames.length} provinsi sebagai sinkron di database...`);
             try {
               await fetch(`${WORKER_URL}/mark-synced`, {
                 method: 'POST',

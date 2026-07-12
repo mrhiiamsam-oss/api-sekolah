@@ -86,43 +86,7 @@ export default {
           }
         }
 
-        // Data Jadwal Sinkronisasi Mingguan per Provinsi (sesuai jalankan-skrip.yml)
-        const jadwal = [
-          { hari: 'Senin', id: 1, provs: ['JAWA BARAT', 'GORONTALO', 'SULAWESI BARAT'] },
-          { hari: 'Selasa', id: 2, provs: ['JAWA TIMUR', 'KEPULAUAN BANGKA BELITUNG', 'KALIMANTAN UTARA'] },
-          { hari: 'Rabu', id: 3, provs: ['JAWA TENGAH', 'BANTEN', 'KEPULAUAN RIAU', 'PAPUA BARAT', 'PAPUA BARAT DAYA'] },
-          { hari: 'Kamis', id: 4, provs: ['SUMATERA UTARA', 'DKI JAKARTA', 'ACEH', 'JAMBI', 'PAPUA', 'PAPUA SELATAN'] },
-          { hari: 'Jumat', id: 5, provs: ['SUMATERA SELATAN', 'LAMPUNG', 'RIAU', 'SUMATERA BARAT', 'PAPUA TENGAH', 'PAPUA PEGUNUNGAN'] },
-          { hari: 'Sabtu', id: 6, provs: ['SULAWESI SELATAN', 'SULAWESI TENGGARA', 'SULAWESI TENGAH', 'SULAWESI UTARA', 'KALIMANTAN TIMUR', 'MALUKU', 'DI YOGYAKARTA', 'MALUKU UTARA'] },
-          { hari: 'Minggu', id: 0, provs: ['KALIMANTAN BARAT', 'KALIMANTAN SELATAN', 'KALIMANTAN TENGAH', 'NUSA TENGGARA TIMUR', 'NUSA TENGGARA BARAT', 'LUAR NEGERI', 'BALI', 'BENGKULU'] }
-        ];
 
-        // Kalkulasi waktu menggunakan UTC yang ditambahkan offset WIB (+7 jam)
-        const nowUtcMs = new Date().getTime();
-        const wibMs = nowUtcMs + (7 * 60 * 60 * 1000);
-        const dateWIB = new Date(wibMs);
-
-        const todayId = dateWIB.getUTCDay(); // 0 = Minggu, 1 = Senin
-        const currentDayIndex = todayId === 0 ? 7 : todayId;
-
-        // Dapatkan representasi tanggal jam 00:00 di WIB untuk kalkulasi offset hari
-        const today00Utc = Date.UTC(dateWIB.getUTCFullYear(), dateWIB.getUTCMonth(), dateWIB.getUTCDate());
-        const today00WibAbsoluteMs = today00Utc - (7 * 60 * 60 * 1000); // Absolute timestamp 00:00 WIB hari ini
-
-        const dateOfMonth = dateWIB.getUTCDate();
-        const isSecondWeek = dateOfMonth >= 8 && dateOfMonth <= 14;
-        const isFourthWeek = dateOfMonth >= 22 && dateOfMonth <= 28;
-        const isMandatoryUpdateWeek = isSecondWeek || isFourthWeek;
-
-        const weekLabel = isSecondWeek ? 'Minggu Ke-2' : (isFourthWeek ? 'Minggu Ke-4' : '');
-
-        const mandatoryUpdateNoticeHtml = isMandatoryUpdateWeek
-          ? `<div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.18); padding: 12px 16px; border-radius: 12px; font-size: 13px; color: #f59e0b; margin-top: 16px; text-align: left; line-height: 1.5; font-weight: 500;">
-              📅 <strong>${weekLabel} Aktif (Tgl ${dateOfMonth} WIB):</strong> Mode Update Wajib Penuh aktif. Provinsi terjadwal hari ini akan disinkronkan secara total tanpa dilewati.
-             </div>`
-          : `<div style="background: rgba(34, 197, 94, 0.04); border: 1px solid rgba(34, 197, 94, 0.12); padding: 12px 16px; border-radius: 12px; font-size: 13px; color: var(--success); margin-top: 16px; text-align: left; line-height: 1.5; font-weight: 500;">
-              ⚡️ <strong>Mode Smart Sync Aktif:</strong> Provinsi terjadwal hari ini yang sudah sinkron (selisih 0) akan dilewati otomatis. Update wajib berikutnya pada tanggal 8-14 (Minggu ke-2) atau 22-28 (Minggu ke-4).
-             </div>`;
 
         const provSyncMap = {};
         provStatusList.forEach(p => {
@@ -205,82 +169,63 @@ export default {
           compareHtml = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted);">Belum ada data perbandingan. Jalankan cron terlebih dahulu.</td></tr>';
         }
 
-        let jadwalHtml = '<div class="jadwal-container"><h2>Jadwal Sinkronisasi Harian (00:30 WIB)</h2><div class="jadwal-grid">';
-        jadwal.forEach(j => {
-          const jIndex = j.id === 0 ? 7 : j.id;
-
-          let diff = jIndex - currentDayIndex;
-          if (diff < -1) diff += 7; // Jika sudah lewat >1 hari, maka jadikan minggu depan
-          if (diff === 6) diff = -1; // +6 hari dari hari ini sama dengan kemarin
-
-          const isToday = diff === 0;
-          const isPast = diff === -1;
-
-          // Hitung tanggal target
-          const targetTime = today00Utc + (diff * 24 * 60 * 60 * 1000);
-          const targetDate = new Date(targetTime);
-
-          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-          const d = targetDate.getUTCDate();
-          const m = monthNames[targetDate.getUTCMonth()];
-          const y = targetDate.getUTCFullYear();
-          const dateStr = `${d} ${m} ${y}`;
-          const displayHari = `${j.hari}, ${dateStr}`;
-
-          let dayClass = isToday ? 'day-card today' : 'day-card';
-          let dayHeaderClass = isToday ? 'day-header today' : 'day-header';
-
-          let provListHtml = j.provs.map(prov => {
-            let statusIcon = '🕒';
-            let statusText = 'Menunggu';
-            let itemClass = 'prov-item waiting';
-
-            const cleanName = (name) => name.replace(/[^A-Z]/g, '');
-            const matchingKey = Object.keys(provSyncMap).find(k => cleanName(k) === cleanName(prov));
-            let lastSyncTime = matchingKey ? provSyncMap[matchingKey] : 0;
-
-            const isCurrentlyRunning = isRunning && activeRow.bentuk_aktif && cleanName(activeRow.bentuk_aktif).includes(cleanName(prov));
-            const isCompleted = lastSyncTime >= targetTime;
-            const isActiveButNotRunning = !isRunning && activeRow.bentuk_aktif && cleanName(activeRow.bentuk_aktif).includes(cleanName(prov));
-
-            // Logika baru: Ikuti status sinkron database (selisih == 0) untuk SEMUA hari
-            const isSynced = compareMap[cleanName(prov)] === 0;
-            const hasData = compareMap[cleanName(prov)] !== undefined;
-
-            if (isCurrentlyRunning) {
-              statusIcon = '<span class="spin-icon">🔄</span>';
-              statusText = 'Proses Sinkronisasi';
-              itemClass = 'prov-item processing';
-            } else if (hasData && isSynced) {
-              statusIcon = '✅';
-              statusText = 'Sudah Sinkron';
-              itemClass = 'prov-item done';
-            } else if (isActiveButNotRunning) {
-              statusIcon = '⚠️';
-              statusText = 'Terhenti / Menunggu';
-              itemClass = 'prov-item waiting';
-            } else {
-              statusIcon = '🕒';
-              statusText = 'Menunggu Sinkronisasi';
-              itemClass = 'prov-item waiting';
-            }
-
-            return `<div class="${itemClass}">
-              <span class="prov-name">${prov}</span>
-              <span class="prov-status" title="${statusText}">${statusIcon}</span>
-            </div>`;
-          }).join('');
-
-          jadwalHtml += `
-            <div class="${dayClass}">
-              <div class="${dayHeaderClass}">${displayHari} ${isToday ? ' (Hari Ini)' : ''}</div>
-              <div class="prov-list">
-                ${provListHtml}
-              </div>
-            </div>
-          `;
+        const diffData = compareCache && compareCache.value ? compareCache.value.filter(d => Math.abs(d.selisih) > 0 || Math.abs(d.raw_selisih || 0) > 0) : [];
+        
+        diffData.sort((a, b) => {
+          const maxDiffA = Math.max(Math.abs(a.selisih), Math.abs(a.raw_selisih || 0));
+          const maxDiffB = Math.max(Math.abs(b.selisih), Math.abs(b.raw_selisih || 0));
+          return maxDiffB - maxDiffA;
         });
-        jadwalHtml += '</div></div>';
+
+        const BATAS_AMAN = 70000;
+        let runningTotalEstimasi = 0;
+        
+        const queueHtml = `
+          <h2 style="font-size: 16px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 20px;">🤖</span> Antrean Smart Sync (Otomatis)
+          </h2>
+          <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; overflow: hidden; margin-bottom: 24px;">
+            <div style="padding: 12px 16px; background: rgba(0,0,0,0.2); font-size: 13px; color: var(--text-muted); border-bottom: 1px solid rgba(255,255,255,0.05); line-height: 1.5;">
+              Sistem secara cerdas mendeteksi provinsi mana yang butuh pembaruan. Provinsi dengan selisih paling besar akan diprioritaskan. 
+              Maksimal <strong>~70.000 data</strong> disinkronisasi setiap harinya untuk menjaga limit <em>database</em>.
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <thead>
+                <tr style="background: rgba(255,255,255,0.05); color: var(--text-muted); text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">
+                  <th style="padding: 12px; text-align: left;">Urutan Prioritas</th>
+                  <th style="padding: 12px; text-align: left;">Provinsi</th>
+                  <th style="padding: 12px; text-align: center;">Estimasi Data</th>
+                  <th style="padding: 12px; text-align: center;">Status Eksekusi</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${diffData.length === 0 ? `
+                  <tr><td colspan="4" style="padding: 24px; text-align: center; color: var(--success); font-weight: 600;">✅ Semua provinsi sudah sinkron sepenuhnya!</td></tr>
+                ` : diffData.map((d, i) => {
+                  let isToday = false;
+                  if (runningTotalEstimasi + d.total_api <= BATAS_AMAN) {
+                    isToday = true;
+                    runningTotalEstimasi += d.total_api;
+                  } else if (i === 0) {
+                    isToday = true;
+                    runningTotalEstimasi += d.total_api;
+                  }
+                  
+                  const statusLabel = isToday ? '<span style="color: var(--warning); font-weight: 600;">⏳ Dieksekusi Hari Ini</span>' : '<span style="color: var(--text-muted);">Antre Besok</span>';
+                  
+                  return `
+                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.02);">
+                      <td style="padding: 12px; text-align: left; font-weight: bold; color: var(--text-color);">#${i + 1}</td>
+                      <td style="padding: 12px; text-align: left;">${d.nama}</td>
+                      <td style="padding: 12px; text-align: center; color: var(--info);">${d.total_api.toLocaleString('id-ID')}</td>
+                      <td style="padding: 12px; text-align: center;">${statusLabel}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
 
         // Fetch Log Aktivitas
         const pageStr = url.searchParams.get('page') || '1';
@@ -593,7 +538,6 @@ export default {
         <span>${progressPercent}% Selesai</span>
         <span>Data: ${totalSynced} / ${totalEstimasi}</span>
       </div>
-      ${mandatoryUpdateNoticeHtml}
     </div>
     
     <h1 id="main-title">Sekolah Sync Dashboard ${isCustom ? '<span style="color: #f59e0b; font-size: 14px; vertical-align: middle; background: rgba(245, 158, 11, 0.15); padding: 4px 10px; border-radius: 20px;">Custom</span>' : '<span style="color: var(--primary-light); font-size: 14px; vertical-align: middle; background: rgba(99, 102, 241, 0.15); padding: 4px 10px; border-radius: 20px;">Full</span>'}</h1>
@@ -622,7 +566,7 @@ export default {
       </div>
     </div>
     
-    ${jadwalHtml}
+    ${queueHtml}
     
     <div style="margin-top: 32px; text-align: left;">
       <h2 style="font-size: 18px; margin-bottom: 16px; color: #fff; font-weight: 600; padding-bottom: 8px; border-bottom: 1px solid var(--border);">Log Aktivitas Terakhir</h2>
