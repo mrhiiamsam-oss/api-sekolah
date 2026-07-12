@@ -129,7 +129,20 @@ async function fetchCustomData() {
         // Cek semua provinsi yang ada selisih (selisih != 0)
         // Kita gunakan raw_selisih jika ada (untuk mendeteksi npsn ganda/kosong), atau selisih biasa
         // Kedua hal ini menandakan ketidaksinkronan data.
-        const diffCodes = compareJson.data.filter(d => (Math.abs(d.selisih) > 0 || Math.abs(d.raw_selisih || 0) > 0) && kodeWilayahList.includes(d.kode));
+        const diffCodes = compareJson.data.filter(d => {
+          if (!kodeWilayahList.includes(d.kode)) return false;
+          if (Math.abs(d.selisih) === 0 && Math.abs(d.raw_selisih || 0) === 0) return false;
+          
+          if (d.terakhir_sukses) {
+            const todayDate = new Date(new Date().getTime() + 7 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const syncedDate = d.terakhir_sukses.split(' ')[0];
+            if (syncedDate === todayDate) {
+              console.log(`✅ ${d.nama} diabaikan (Sudah tersinkronisasi hari ini, sisa selisih disebabkan NPSN Ganda/Kosong)`);
+              return false;
+            }
+          }
+          return true;
+        });
         const syncedCodes = compareJson.data.filter(d => d.selisih === 0 && (d.raw_selisih || 0) === 0 && kodeWilayahList.includes(d.kode));
 
         // Kuota aman penulisan baris per hari untuk Cloudflare D1 Free (Limit ~100k write/hari).

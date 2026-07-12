@@ -127,11 +127,6 @@ export default {
             
             const warnings = [];
             if (d.raw_selisih > 0) warnings.push(`⚠️ Indikasi NPSN Ganda/Kosong: ${d.raw_selisih}`);
-            if (d.tanpa_bentuk > 0) warnings.push(`Bentuk Kosong: ${d.tanpa_bentuk}`);
-            if (d.tanpa_jenjang > 0) warnings.push(`Jenjang Kosong: ${d.tanpa_jenjang}`);
-            if (d.tanpa_kabupaten > 0) warnings.push(`Kab/Kota Kosong: ${d.tanpa_kabupaten}`);
-            if (d.tanpa_kecamatan > 0) warnings.push(`Kec. Kosong: ${d.tanpa_kecamatan}`);
-            if (d.tanpa_desa > 0) warnings.push(`Desa/Kel Kosong: ${d.tanpa_desa}`);
             const warningHtml = warnings.length > 0 ? `<div style="font-size: 10px; color: #f87171; margin-top: 4px; line-height: 1.4;">${warnings.join('<br>')}</div>` : '';
 
             return `
@@ -169,7 +164,12 @@ export default {
           compareHtml = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted);">Belum ada data perbandingan. Jalankan cron terlebih dahulu.</td></tr>';
         }
 
-        const diffData = compareCache && compareCache.value ? compareCache.value.filter(d => Math.abs(d.selisih) > 0 || Math.abs(d.raw_selisih || 0) > 0) : [];
+        const todayDateWIB = new Date(new Date().getTime() + 7 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const diffData = compareCache && compareCache.value ? compareCache.value.filter(d => {
+          if (Math.abs(d.selisih) === 0 && Math.abs(d.raw_selisih || 0) === 0) return false;
+          if (d.terakhir_sukses && d.terakhir_sukses.split(' ')[0] === todayDateWIB) return false;
+          return true;
+        }) : [];
         
         diffData.sort((a, b) => {
           const maxDiffA = Math.max(Math.abs(a.selisih), Math.abs(a.raw_selisih || 0));
@@ -683,6 +683,15 @@ export default {
           let c = name.replace(/[^A-Z]/gi, '').toUpperCase();
           return c.replace(/^PROVINSI|^PROV/, '');
         };
+
+        await env.DB.prepare(`CREATE TABLE IF NOT EXISTS provinsi_sync_status (nama_provinsi TEXT PRIMARY KEY, terakhir_sukses TIMESTAMPTZ)`).run();
+        const { results: syncStatusRes } = await env.DB.prepare('SELECT nama_provinsi, terakhir_sukses FROM provinsi_sync_status').all();
+        const syncStatusMap = {};
+        if (syncStatusRes) {
+          syncStatusRes.forEach(r => {
+            syncStatusMap[cleanName(r.nama_provinsi)] = r.terakhir_sukses;
+          });
+        }
 
         const dbMap = {};
         dbRes.forEach(r => {
