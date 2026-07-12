@@ -120,8 +120,20 @@ export default {
           });
 
           compareHtml = compareCache.value.map((d, idx) => {
-            const selisihColor = d.selisih === 0 ? 'var(--success)' : 'var(--danger)';
-            const statusIcon = d.selisih === 0 ? '✅ Sinkron' : '⚠️ Berbeda';
+            const todayDate = new Date(new Date().getTime() + 7 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const isSyncedToday = d.terakhir_sukses && d.terakhir_sukses.split(' ')[0] === todayDate;
+
+            let selisihColor = 'var(--danger)';
+            let statusIcon = '⚠️ Berbeda';
+            
+            if (d.selisih === 0) {
+              selisihColor = 'var(--success)';
+              statusIcon = '✅ Sinkron';
+            } else if (isSyncedToday) {
+              selisihColor = 'var(--warning)';
+              statusIcon = '✅ Selesai (Ada Data Gagal)';
+            }
+
             const displayStyle = idx >= 5 ? 'display: none;' : '';
             const trClass = idx >= 5 ? 'hidden-row' : '';
             
