@@ -286,7 +286,7 @@ export default {
               <br>Kuota Harian Digunakan: <strong style="color: ${SISA_KUOTA <= 0 ? 'var(--danger)' : 'var(--warning)'}">${syncedToday.toLocaleString('id-ID')} / 70.000</strong>
               ${SISA_KUOTA <= 0 ? '<span style="color: var(--danger); font-weight: bold; margin-left: 8px;">⚠️ KUOTA PENUH, SISA ANTREAN DITUNDA BESOK</span>' : ''}
             </div>
-            <div style="overflow-x: auto;">
+            <div id="queue-table-wrapper" style="overflow-x: auto;">
             <table style="width: 100%; min-width: 500px; border-collapse: collapse; font-size: 13px;">
               <thead>
                 <tr style="background: rgba(0,0,0,0.04); color: var(--text-muted); text-transform: uppercase; font-size: 11px; font-weight: 600; letter-spacing: 0.5px;">
@@ -618,7 +618,13 @@ export default {
             
             const queueContainer = document.getElementById('queue-container');
             const newQueueContainer = doc.getElementById('queue-container');
-            if (queueContainer && newQueueContainer) queueContainer.innerHTML = newQueueContainer.innerHTML;
+            if (queueContainer && newQueueContainer) {
+              const queueWrapper = queueContainer.querySelector('#queue-table-wrapper');
+              const currentScrollX = queueWrapper ? queueWrapper.scrollLeft : 0;
+              queueContainer.innerHTML = newQueueContainer.innerHTML;
+              const newQueueWrapper = queueContainer.querySelector('#queue-table-wrapper');
+              if (newQueueWrapper) newQueueWrapper.scrollLeft = currentScrollX;
+            }
             
             // Restore show all state
             if (isShowAll) {
