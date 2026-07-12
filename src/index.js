@@ -178,6 +178,8 @@ export default {
         });
 
         const BATAS_AMAN = 70000;
+        const syncedToday = compareCache && compareCache.synced_today ? compareCache.synced_today : 0;
+        const SISA_KUOTA = Math.max(0, BATAS_AMAN - syncedToday);
         let runningTotalEstimasi = 0;
         
         const queueHtml = `
@@ -188,6 +190,8 @@ export default {
             <div style="padding: 12px 16px; background: rgba(0,0,0,0.2); font-size: 13px; color: var(--text-muted); border-bottom: 1px solid rgba(255,255,255,0.05); line-height: 1.5;">
               Sistem secara cerdas mendeteksi provinsi mana yang butuh pembaruan. Provinsi dengan selisih paling besar akan diprioritaskan. 
               Maksimal <strong>~70.000 data</strong> disinkronisasi setiap harinya untuk menjaga limit <em>database</em>.
+              <br>Kuota Harian Digunakan: <strong style="color: ${SISA_KUOTA <= 0 ? 'var(--danger)' : 'var(--warning)'}">${syncedToday.toLocaleString('id-ID')} / 70.000</strong>
+              ${SISA_KUOTA <= 0 ? '<span style="color: var(--danger); font-weight: bold; margin-left: 8px;">⚠️ KUOTA PENUH, SISA ANTREAN DITUNDA BESOK</span>' : ''}
             </div>
             <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
               <thead>
@@ -203,7 +207,7 @@ export default {
                   <tr><td colspan="4" style="padding: 24px; text-align: center; color: var(--success); font-weight: 600;">✅ Semua provinsi sudah sinkron sepenuhnya!</td></tr>
                 ` : diffData.map((d, i) => {
                   let isToday = false;
-                  if (runningTotalEstimasi + d.total_api <= BATAS_AMAN) {
+                  if (runningTotalEstimasi + d.total_api <= SISA_KUOTA) {
                     isToday = true;
                     runningTotalEstimasi += d.total_api;
                   } else if (i === 0) {
@@ -627,7 +631,7 @@ export default {
         if (!isCron) {
           const { results } = await env.DB.prepare("SELECT value FROM cache_data WHERE key = 'perbandingan'").all();
           if (results && results.length > 0) {
-            return new Response(JSON.stringify({ success: true, data: JSON.parse(results[0].value) }), {
+            return new Response(JSON.stringify({ success: true, data: JSON.parse(results[0].value), synced_today }), {
               headers: { 'content-type': 'application/json' }
             });
           }
@@ -733,7 +737,7 @@ export default {
           ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
         `).bind(jsonResult).run();
 
-        return new Response(JSON.stringify({ success: true, data: comparison }), {
+        return new Response(JSON.stringify({ success: true, data: comparison, synced_today }), {
           headers: { 'content-type': 'application/json' }
         });
       } catch (err) {
