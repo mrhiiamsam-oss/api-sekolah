@@ -864,6 +864,7 @@ export default {
           
           return { 
             ...d, 
+            terakhir_sukses: syncStatusMap[cleanName(d.nama)],
             total_db, 
             tanpa_bentuk: dbData.tanpa_bentuk, 
             tanpa_jenjang: dbData.tanpa_jenjang, 
