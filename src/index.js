@@ -160,18 +160,22 @@ export default {
             const statusIcon = d.selisih === 0 ? '✅ Sinkron' : '⚠️ Berbeda';
             const displayStyle = idx >= 5 ? 'display: none;' : '';
             const trClass = idx >= 5 ? 'hidden-row' : '';
+            
+            const warnings = [];
+            if (d.raw_selisih > 0) warnings.push(`⚠️ Indikasi NPSN Ganda/Kosong: ${d.raw_selisih}`);
+            if (d.tanpa_bentuk > 0) warnings.push(`Bentuk Kosong: ${d.tanpa_bentuk}`);
+            if (d.tanpa_jenjang > 0) warnings.push(`Jenjang Kosong: ${d.tanpa_jenjang}`);
+            if (d.tanpa_kabupaten > 0) warnings.push(`Kab/Kota Kosong: ${d.tanpa_kabupaten}`);
+            if (d.tanpa_kecamatan > 0) warnings.push(`Kec. Kosong: ${d.tanpa_kecamatan}`);
+            if (d.tanpa_desa > 0) warnings.push(`Desa/Kel Kosong: ${d.tanpa_desa}`);
+            const warningHtml = warnings.length > 0 ? `<div style="font-size: 10px; color: #f87171; margin-top: 4px; line-height: 1.4;">${warnings.join('<br>')}</div>` : '';
+
             return `
                 <tr class="${trClass}" style="border-bottom: 1px solid rgba(255,255,255,0.02); ${displayStyle}">
                   <td style="padding: 8px;">${d.nama} <div style="font-size: 10px; color: var(--text-muted)">Kode: ${d.kode}</div></td>
                   <td style="padding: 8px; text-align: center; color: var(--info);">
                     ${d.total_api.toLocaleString('id-ID')}
-                    ${(d.tanpa_bentuk > 0 || d.tanpa_jenjang > 0 || d.raw_selisih > 0) ? `
-                      <div style="font-size: 10px; color: #f87171; margin-top: 4px; line-height: 1.4;">
-                        ${d.raw_selisih > 0 ? `⚠️ Indikasi NPSN Ganda/Kosong: ${d.raw_selisih}<br>` : ''}
-                        ${d.tanpa_bentuk > 0 ? `Bentuk Kosong: ${d.tanpa_bentuk}<br>` : ''}
-                        ${d.tanpa_jenjang > 0 ? `Jenjang Kosong: ${d.tanpa_jenjang}` : ''}
-                      </div>
-                    ` : ''}
+                    ${warningHtml}
                   </td>
                   <td style="padding: 8px; text-align: center; color: var(--primary-light);">
                     ${d.total_db.toLocaleString('id-ID')}
@@ -718,7 +722,10 @@ export default {
             nama_provinsi as provinsi, 
             COUNT(*) as total_db,
             SUM(CASE WHEN bentuk_pendidikan IS NULL OR bentuk_pendidikan = '' OR bentuk_pendidikan = '-' THEN 1 ELSE 0 END) as tanpa_bentuk,
-            SUM(CASE WHEN jenjang_pendidikan IS NULL OR jenjang_pendidikan = '' OR jenjang_pendidikan = '-' THEN 1 ELSE 0 END) as tanpa_jenjang
+            SUM(CASE WHEN jenjang_pendidikan IS NULL OR jenjang_pendidikan = '' OR jenjang_pendidikan = '-' THEN 1 ELSE 0 END) as tanpa_jenjang,
+            SUM(CASE WHEN nama_kabupaten IS NULL OR nama_kabupaten = '' OR nama_kabupaten = '-' THEN 1 ELSE 0 END) as tanpa_kabupaten,
+            SUM(CASE WHEN nama_kecamatan IS NULL OR nama_kecamatan = '' OR nama_kecamatan = '-' THEN 1 ELSE 0 END) as tanpa_kecamatan,
+            SUM(CASE WHEN nama_desa IS NULL OR nama_desa = '' OR nama_desa = '-' THEN 1 ELSE 0 END) as tanpa_desa
           FROM sekolah 
           GROUP BY nama_provinsi
         `).all();
@@ -734,7 +741,10 @@ export default {
           dbMap[cleanName(r.provinsi)] = {
             total_db: r.total_db,
             tanpa_bentuk: r.tanpa_bentuk || 0,
-            tanpa_jenjang: r.tanpa_jenjang || 0
+            tanpa_jenjang: r.tanpa_jenjang || 0,
+            tanpa_kabupaten: r.tanpa_kabupaten || 0,
+            tanpa_kecamatan: r.tanpa_kecamatan || 0,
+            tanpa_desa: r.tanpa_desa || 0
           };
         });
 
@@ -745,11 +755,22 @@ export default {
         const comparison = apiData.map(d => {
           const duplicateOffset = API_DUPLICATES[d.kode] || 0;
           const adjustedTotalApi = d.total_api - duplicateOffset;
-          const dbData = dbMap[cleanName(d.nama)] || { total_db: 0, tanpa_bentuk: 0, tanpa_jenjang: 0 };
+          const dbData = dbMap[cleanName(d.nama)] || { total_db: 0, tanpa_bentuk: 0, tanpa_jenjang: 0, tanpa_kabupaten: 0, tanpa_kecamatan: 0, tanpa_desa: 0 };
           const total_db = dbData.total_db;
           const selisih = adjustedTotalApi - total_db;
           const raw_selisih = d.total_api - total_db;
-          return { ...d, total_api: adjustedTotalApi, total_db, tanpa_bentuk: dbData.tanpa_bentuk, tanpa_jenjang: dbData.tanpa_jenjang, selisih, raw_selisih };
+          return { 
+            ...d, 
+            total_api: adjustedTotalApi, 
+            total_db, 
+            tanpa_bentuk: dbData.tanpa_bentuk, 
+            tanpa_jenjang: dbData.tanpa_jenjang, 
+            tanpa_kabupaten: dbData.tanpa_kabupaten,
+            tanpa_kecamatan: dbData.tanpa_kecamatan,
+            tanpa_desa: dbData.tanpa_desa,
+            selisih, 
+            raw_selisih 
+          };
         });
 
         comparison.sort((a, b) => {
