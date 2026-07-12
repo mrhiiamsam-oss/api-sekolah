@@ -735,7 +735,6 @@ export default {
           const raw_selisih = d.total_api - total_db;
           return { 
             ...d, 
-            total_api: adjustedTotalApi, 
             total_db, 
             tanpa_bentuk: dbData.tanpa_bentuk, 
             tanpa_jenjang: dbData.tanpa_jenjang, 
