@@ -160,20 +160,42 @@ async function fetchCustomData() {
         });
         const syncedCodes = compareJson.data.filter(d => d.selisih === 0 && (d.raw_selisih || 0) === 0 && kodeWilayahList.includes(d.kode));
 
-        // Kuota aman penulisan baris per hari untuk Cloudflare D1 Free (Limit ~100k write/hari).
-        const BATAS_AMAN_DATA_PER_HARI = 70000; 
+        // Kuota aman penulisan baris per hari untuk Cloudflare D1 Free.
+        const BATAS_AMAN_DATA_PER_HARI = 450000; 
         
         let totalDataSaatIni = compareJson.synced_today || 0;
         let finalTargets = [];
 
         console.log(`📊 Kuota yang sudah terpakai hari ini: ${totalDataSaatIni.toLocaleString('id-ID')} / ${BATAS_AMAN_DATA_PER_HARI.toLocaleString('id-ID')}`);
 
-        // Urutkan provinsi berdasarkan jumlah absolute selisih dari terbesar ke terkecil
-        // Agar yang paling parah perbedaannya segera dieksekusi.
+        // Urutkan provinsi berdasarkan aturan prioritas:
+        // 1. Yang berbeda duluan
+        // 2. Yang belum pernah sukses (belum sinkron) diprioritaskan.
+        // 3. Yang sudah di sinkron tapi ada datanya berbeda diletakkan di akhir prioritas, bergiliran (yang terlama duluan).
         diffCodes.sort((a, b) => {
+          const aIsDifferent = (Math.abs(a.selisih) > 0 && !a.is_sinkron_walau_selisih) ? 1 : 0;
+          const bIsDifferent = (Math.abs(b.selisih) > 0 && !b.is_sinkron_walau_selisih) ? 1 : 0;
+          
+          if (aIsDifferent !== bIsDifferent) {
+             return bIsDifferent - aIsDifferent; // 1 (berbeda) duluan
+          }
+
+          const aHasSynced = a.terakhir_sukses ? 1 : 0;
+          const bHasSynced = b.terakhir_sukses ? 1 : 0;
+          
+          if (aHasSynced !== bHasSynced) {
+            return aHasSynced - bHasSynced; // 0 (belum sinkron) duluan
+          }
+          
+          if (aHasSynced && bHasSynced) {
+             const timeA = new Date(a.terakhir_sukses).getTime();
+             const timeB = new Date(b.terakhir_sukses).getTime();
+             if (timeA !== timeB) return timeA - timeB; // Terlama duluan agar bergiliran
+          }
+
           const maxDiffA = Math.abs(a.selisih);
           const maxDiffB = Math.abs(b.selisih);
-          return maxDiffB - maxDiffA;
+          return maxDiffB - maxDiffA; // Sisanya urutkan berdasarkan selisih terbesar
         });
 
         for (const p of diffCodes) {

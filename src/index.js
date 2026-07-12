@@ -230,7 +230,7 @@ export default {
           });
         }
 
-        const BATAS_AMAN = 70000;
+        const BATAS_AMAN = 450000;
         let syncedToday = 0;
         try {
           const { results: syncedTodayRes } = await env.DB.prepare("SELECT SUM(total_baru + total_diperbarui + total_tidak_berubah) as total FROM log_aktivitas_provinsi WHERE DATE(waktu_selesai) = DATE('now', '+7 hours')").all();
@@ -281,9 +281,9 @@ export default {
           </h2>
           <div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 24px;">
             <div style="padding: 12px 16px; background: rgba(0,0,0,0.03); font-size: 13px; color: var(--text-muted); border-bottom: 1px solid var(--border); line-height: 1.5;">
-              Sistem secara cerdas mendeteksi provinsi mana yang butuh pembaruan. Provinsi dengan selisih paling besar akan diprioritaskan. 
-              Maksimal <strong>~70.000 data</strong> disinkronisasi setiap harinya untuk menjaga limit <em>database</em>.
-              <br>Kuota Harian Digunakan: <strong style="color: ${SISA_KUOTA <= 0 ? 'var(--danger)' : 'var(--warning)'}">${syncedToday.toLocaleString('id-ID')} / 70.000</strong>
+              Sistem secara cerdas mendeteksi provinsi mana yang butuh pembaruan. Provinsi dengan data tidak sinkron (belum pernah sukses) akan diprioritaskan, sedangkan yang sudah tersinkron namun berbeda akan digilir ke akhir antrean. 
+              Maksimal <strong>~450.000 data</strong> disinkronisasi setiap harinya untuk menjaga limit <em>database</em>.
+              <br>Kuota Harian Digunakan: <strong style="color: ${SISA_KUOTA <= 0 ? 'var(--danger)' : 'var(--warning)'}">${syncedToday.toLocaleString('id-ID')} / 450.000</strong>
               ${SISA_KUOTA <= 0 ? '<span style="color: var(--danger); font-weight: bold; margin-left: 8px;">⚠️ KUOTA PENUH, SISA ANTREAN DITUNDA BESOK</span>' : ''}
             </div>
             <div id="queue-table-wrapper" style="overflow-x: auto;">
