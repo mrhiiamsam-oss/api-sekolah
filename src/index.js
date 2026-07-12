@@ -205,7 +205,7 @@ export default {
             return todaySchedule.includes(d.nama) || tomorrowSchedule.includes(d.nama);
           } else {
             if (d.isSyncedToday) return false;
-            if (Math.abs(d.selisih) === 0) return false;
+            if (Math.abs(d.selisih) === 0 || d.is_sinkron_walau_selisih) return false;
             return true;
           }
         }) : [];
@@ -310,6 +310,7 @@ export default {
                     }
                   }
                   
+                  const isSynced = Math.abs(d.selisih) === 0 || d.is_sinkron_walau_selisih;
                   let statusLabel = isToday ? '<span style="color: var(--warning); font-weight: 600;">⏳ Dieksekusi Hari Ini</span>' : '<span style="color: var(--text-muted);">Antre Besok</span>';
                   
                   let rowStyle = 'border-bottom: 1px solid var(--border);';
@@ -804,14 +805,19 @@ export default {
         try {
           await env.DB.prepare(`ALTER TABLE provinsi_sync_status ADD COLUMN api_duplicates INTEGER DEFAULT 0`).run();
         } catch(e) {}
+        try {
+          await env.DB.prepare(`ALTER TABLE provinsi_sync_status ADD COLUMN api_empty_npsn INTEGER DEFAULT 0`).run();
+        } catch(e) {}
         
-        const { results: syncStatusRes } = await env.DB.prepare('SELECT nama_provinsi, terakhir_sukses, api_duplicates FROM provinsi_sync_status').all();
+        const { results: syncStatusRes } = await env.DB.prepare('SELECT nama_provinsi, terakhir_sukses, api_duplicates, api_empty_npsn FROM provinsi_sync_status').all();
         const syncStatusMap = {};
         const duplicatesMap = {};
+        const emptyNpsnMap = {};
         if (syncStatusRes) {
           syncStatusRes.forEach(r => {
             syncStatusMap[cleanName(r.nama_provinsi)] = r.terakhir_sukses;
             duplicatesMap[cleanName(r.nama_provinsi)] = r.api_duplicates || 0;
+            emptyNpsnMap[cleanName(r.nama_provinsi)] = r.api_empty_npsn || 0;
           });
         }
 
@@ -835,10 +841,14 @@ export default {
           if (d.kode === '250000' && duplicateOffset === 0) duplicateOffset = 1;
 
           const adjustedTotalApi = d.total_api - duplicateOffset;
+          const emptyNpsnOffset = emptyNpsnMap[cleanName(d.nama)] || 0;
           const dbData = dbMap[cleanName(d.nama)] || { total_db: 0, tanpa_bentuk: 0, tanpa_jenjang: 0, tanpa_kabupaten: 0, tanpa_kecamatan: 0, tanpa_desa: 0 };
           const total_db = dbData.total_db;
           const selisih = adjustedTotalApi - total_db;
           const raw_selisih = d.total_api - total_db;
+          
+          const is_sinkron_walau_selisih = selisih !== 0 && selisih === emptyNpsnOffset;
+          
           return { 
             ...d, 
             total_db, 
@@ -848,13 +858,14 @@ export default {
             tanpa_kecamatan: dbData.tanpa_kecamatan,
             tanpa_desa: dbData.tanpa_desa,
             selisih, 
-            raw_selisih 
+            raw_selisih,
+            is_sinkron_walau_selisih
           };
         });
 
         comparison.sort((a, b) => {
-          const aDiff = a.selisih !== 0 ? 1 : 0;
-          const bDiff = b.selisih !== 0 ? 1 : 0;
+          const aDiff = (a.selisih !== 0 && !a.is_sinkron_walau_selisih) ? 1 : 0;
+          const bDiff = (b.selisih !== 0 && !b.is_sinkron_walau_selisih) ? 1 : 0;
           if (aDiff !== bDiff) return bDiff - aDiff;
           return a.nama.localeCompare(b.nama);
         });
@@ -915,6 +926,9 @@ export default {
           try {
             await env.DB.prepare(`ALTER TABLE provinsi_sync_status ADD COLUMN api_duplicates INTEGER DEFAULT 0`).run();
           } catch (e) { }
+          try {
+            await env.DB.prepare(`ALTER TABLE provinsi_sync_status ADD COLUMN api_empty_npsn INTEGER DEFAULT 0`).run();
+          } catch (e) { }
 
           // Hitung api_duplicates: (totalEstimasi dari API) - (total_db setelah dihapus) - (total_tanpa_npsn yang di-skip)
           const { results: currentStatsRes } = await env.DB.prepare(`SELECT total_tanpa_npsn FROM status_sinkronisasi WHERE id = 2`).all();
@@ -928,12 +942,13 @@ export default {
           if (api_duplicates < 0) api_duplicates = 0;
 
           await env.DB.prepare(`
-            INSERT INTO provinsi_sync_status (nama_provinsi, terakhir_sukses, api_duplicates)
-            VALUES (?, datetime('now', '+7 hours'), ?)
+            INSERT INTO provinsi_sync_status (nama_provinsi, terakhir_sukses, api_duplicates, api_empty_npsn)
+            VALUES (?, datetime('now', '+7 hours'), ?, ?)
             ON CONFLICT(nama_provinsi) DO UPDATE SET 
               terakhir_sukses = excluded.terakhir_sukses,
-              api_duplicates = excluded.api_duplicates
-          `).bind(body.namaProvinsi, api_duplicates).run();
+              api_duplicates = excluded.api_duplicates,
+              api_empty_npsn = excluded.api_empty_npsn
+          `).bind(body.namaProvinsi, api_duplicates, totalTanpaNpsn).run();
         }
 
         if (isFinished) {

@@ -145,7 +145,7 @@ async function fetchCustomData() {
         const diffCodes = compareJson.data.filter(d => {
           if (!kodeWilayahList.includes(d.kode)) return false;
           
-          const isSynced = Math.abs(d.selisih) === 0;
+          const isSynced = Math.abs(d.selisih) === 0 || d.is_sinkron_walau_selisih;
           if (isSynced && !isMandatoryUpdateWeek) return false;
           
           if (d.terakhir_sukses) {
