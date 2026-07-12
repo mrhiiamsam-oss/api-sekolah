@@ -141,7 +141,14 @@ export default {
             const trClass = idx >= 5 ? 'hidden-row' : '';
             
             const warnings = [];
-            if (d.raw_selisih > 0) warnings.push(`⚠️ Indikasi NPSN Ganda/Kosong: ${d.raw_selisih}`);
+            if (d.api_duplicates > 0) warnings.push(`⚠️ NPSN Ganda: ${d.api_duplicates}`);
+            if (d.api_empty_npsn > 0) warnings.push(`⚠️ NPSN Kosong: ${d.api_empty_npsn}`);
+            
+            // Fallback jika ada selisih yang belum teridentifikasi
+            if (d.raw_selisih > 0 && d.api_duplicates === 0 && d.api_empty_npsn === 0) {
+              warnings.push(`⚠️ Indikasi Data Invalid: ${d.raw_selisih}`);
+            }
+            
             const warningHtml = warnings.length > 0 ? `<div style="font-size: 11px; font-weight: 600; color: var(--danger); margin-top: 6px; line-height: 1.4;">${warnings.join('<br>')}</div>` : '';
 
             return `
@@ -893,6 +900,8 @@ export default {
             tanpa_desa: dbData.tanpa_desa,
             selisih, 
             raw_selisih,
+            api_duplicates: duplicateOffset,
+            api_empty_npsn: emptyNpsnOffset,
             is_sinkron_walau_selisih
           };
         });
