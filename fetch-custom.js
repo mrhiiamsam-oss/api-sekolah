@@ -62,6 +62,9 @@ async function postBatchToWorker(dataList, bentukAktif, offset, isFinished, cust
     payload.waktuMulai = customSyncParams.waktuMulai;
     payload.isStart = customSyncParams.isStart;
     payload.totalEstimasi = customSyncParams.totalEstimasi;
+    if (customSyncParams.activeNpsnList) {
+      payload.activeNpsnList = customSyncParams.activeNpsnList;
+    }
   }
   const res = await fetch(`${WORKER_URL}/sync-batch`, {
     method: 'POST',
@@ -161,7 +164,7 @@ async function fetchCustomData() {
         const syncedCodes = compareJson.data.filter(d => d.selisih === 0 && (d.raw_selisih || 0) === 0 && kodeWilayahList.includes(d.kode));
 
         // Kuota aman penulisan baris per hari untuk Cloudflare D1 Free.
-        const BATAS_AMAN_DATA_PER_HARI = 450000; 
+        const BATAS_AMAN_DATA_PER_HARI = 500000; 
         
         let totalDataSaatIni = compareJson.synced_today || 0;
         let finalTargets = [];
@@ -295,6 +298,9 @@ async function fetchCustomData() {
   let previousProv = null;
   let currentProvinceStarted = false;
   let currentTotalEstimasi = 0;
+  
+  let provinceStartedCleanly = {};
+  let activeNpsnsByProv = {};
 
   while (taskIndex < tasks.length) {
     if (Date.now() - startTime > LAMA_MAKSIMAL) {
@@ -312,6 +318,9 @@ async function fetchCustomData() {
       const isVeryBeginningOfProvince = (offset === 0) && (taskIndex === tasks.findIndex(t => t.prov === kodeWilayah));
       currentProvinceStarted = !isVeryBeginningOfProvince; 
       previousProv = kodeWilayah;
+      
+      provinceStartedCleanly[kodeWilayah] = isVeryBeginningOfProvince;
+      activeNpsnsByProv[kodeWilayah] = [];
       
       try {
         const totalUrl = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=1&offset=0`;
@@ -343,11 +352,21 @@ async function fetchCustomData() {
          if (isProvinceFinished) {
           console.log(`✨ Selesai sinkronisasi seluruh bentuk untuk provinsi ${kodeWilayah} (${namaWilayah}). Melakukan pembersihan...`);
           const provNameDB = kodeWilayah === "360" ? "SEMUA" : PROVINCES[kodeWilayah];
+          
+          let fullNpsnList = [];
+          if (provinceStartedCleanly[kodeWilayah]) {
+            fullNpsnList = activeNpsnsByProv[kodeWilayah] || [];
+            console.log(`Mengirim ${fullNpsnList.length} NPSN aktif ke Worker untuk deteksi penghapusan data...`);
+          } else {
+            console.log(`Pembersihan dilewati karena provinsi disinkronisasi sebagian pada sesi ini.`);
+          }
+
           try {
             const { stats } = await postBatchToWorker([], 'tk', 0, true, {
               bentukList,
               namaProvinsi: provNameDB,
-              waktuMulai: waktuMulai
+              waktuMulai: waktuMulai,
+              activeNpsnList: fullNpsnList
             });
             console.log(`🧹 Berhasil membersihkan data lama untuk ${provNameDB}. ${stats?.dihapus || 0} sekolah dihapus dan aktivitas dicatat.`);
             
@@ -374,6 +393,10 @@ async function fetchCustomData() {
       const provNameDB = kodeWilayah === "360" ? "SEMUA" : PROVINCES[kodeWilayah];
       const isStartProv = !currentProvinceStarted;
       
+      if (dataList && dataList.length > 0 && provinceStartedCleanly[kodeWilayah]) {
+         activeNpsnsByProv[kodeWilayah].push(...dataList.map(d => d.npsn).filter(Boolean));
+      }
+
       const customParams = {
         bentukList,
         namaProvinsi: provNameDB,

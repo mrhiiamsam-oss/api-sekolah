@@ -230,7 +230,7 @@ export default {
           });
         }
 
-        const BATAS_AMAN = 450000;
+        const BATAS_AMAN = 500000;
         let syncedToday = 0;
         try {
           const { results: syncedTodayRes } = await env.DB.prepare("SELECT SUM(total_baru + total_diperbarui + total_tidak_berubah) as total FROM log_aktivitas_provinsi WHERE DATE(waktu_selesai) = DATE('now', '+7 hours')").all();
@@ -282,8 +282,8 @@ export default {
           <div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 24px;">
             <div style="padding: 12px 16px; background: rgba(0,0,0,0.03); font-size: 13px; color: var(--text-muted); border-bottom: 1px solid var(--border); line-height: 1.5;">
               Sistem secara cerdas mendeteksi provinsi mana yang butuh pembaruan. Provinsi dengan data tidak sinkron (belum pernah sukses) akan diprioritaskan, sedangkan yang sudah tersinkron namun berbeda akan digilir ke akhir antrean. 
-              Maksimal <strong>~450.000 data</strong> disinkronisasi setiap harinya untuk menjaga limit <em>database</em>.
-              <br>Kuota Harian Digunakan: <strong style="color: ${SISA_KUOTA <= 0 ? 'var(--danger)' : 'var(--warning)'}">${syncedToday.toLocaleString('id-ID')} / 450.000</strong>
+              Maksimal <strong>~500.000 data</strong> disinkronisasi setiap harinya untuk menjaga limit <em>database</em>.
+              <br>Kuota Harian Digunakan: <strong style="color: ${SISA_KUOTA <= 0 ? 'var(--danger)' : 'var(--warning)'}">${syncedToday.toLocaleString('id-ID')} / 500.000</strong>
               ${SISA_KUOTA <= 0 ? '<span style="color: var(--danger); font-weight: bold; margin-left: 8px;">⚠️ KUOTA PENUH, SISA ANTREAN DITUNDA BESOK</span>' : ''}
             </div>
             <div id="queue-table-wrapper" style="overflow-x: auto;">
@@ -990,8 +990,32 @@ export default {
               }
             }
 
-            const delRes = await env.DB.prepare(query).bind(...params).run();
-            stats.dihapus = delRes.meta.changes;
+            // Karena kita berhenti mengupdate migrated_at untuk data yang tidak berubah (demi menghemat kuota D1),
+            // pembersihan otomatis dilakukan dengan mencocokkan list NPSN aktif yang dikirim oleh worker.
+            stats.dihapus = 0;
+            if (body.activeNpsnList && body.activeNpsnList.length > 0) {
+              const searchProv = body.namaProvinsi === 'LUAR NEGERI' ? 'LUAR NEGERI' : `PROV. ${body.namaProvinsi}`;
+              
+              // Ambil semua NPSN yang ada di database untuk provinsi ini
+              const { results: dbSchools } = await env.DB.prepare(`SELECT npsn FROM sekolah WHERE nama_provinsi = ?`).bind(searchProv).all();
+              
+              const dbNpsnSet = new Set((dbSchools || []).map(r => r.npsn));
+              
+              // Hapus NPSN yang masih aktif (berarti sisanya adalah sekolah yang sudah tutup/dihapus)
+              body.activeNpsnList.forEach(npsn => dbNpsnSet.delete(npsn));
+              
+              const deletedNpsns = Array.from(dbNpsnSet);
+              if (deletedNpsns.length > 0) {
+                // Eksekusi penghapusan dalam chunk untuk menghindari limit parameter bind SQLite
+                const chunkSize = 100;
+                for (let i = 0; i < deletedNpsns.length; i += chunkSize) {
+                  const chunk = deletedNpsns.slice(i, i + chunkSize);
+                  const placeholders = chunk.map(() => '?').join(',');
+                  const delRes = await env.DB.prepare(`DELETE FROM sekolah WHERE npsn IN (${placeholders}) AND nama_provinsi = ?`).bind(...chunk, searchProv).run();
+                  stats.dihapus += delRes.meta.changes;
+                }
+              }
+            }
 
             // Ambil data status_sinkronisasi saat ini sebelum direset (untuk dicatat ke log_aktivitas)
             const { results: currentStatsRes } = await env.DB.prepare(`SELECT * FROM status_sinkronisasi WHERE id = 2`).all();
@@ -1028,12 +1052,15 @@ export default {
               WHERE id = 1
             `).run();
 
-            // Hapus sekolah yang usianya lebih lama dari waktu mulai sinkronisasi siklus ini
+            // Pembersihan berdasarkan migrated_at dinonaktifkan agar tidak menghapus data yang tidak ada perubahan.
+            /*
             const delRes = await env.DB.prepare(`
               DELETE FROM sekolah WHERE migrated_at < (SELECT waktu_mulai_sinkronisasi FROM status_sinkronisasi WHERE id = 1)
             `).run();
 
             stats.dihapus = delRes.meta.changes;
+            */
+            stats.dihapus = 0;
 
             await env.DB.prepare(`
               UPDATE status_sinkronisasi 

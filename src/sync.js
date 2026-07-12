@@ -131,12 +131,5 @@ export async function syncBatch(db, dataList) {
     await db.batch(statements);
   }
 
-  // Update migrated_at untuk sekolah yang tidak berubah agar terhindar dari pembersihan otomatis
-  const npsnTidakBerubah = prepared.filter(p => existing.get(p.npsn) === p.rowFp).map(p => p.npsn);
-  if (npsnTidakBerubah.length > 0) {
-    const placeholdersTidakBerubah = npsnTidakBerubah.map(() => '?').join(',');
-    await db.prepare(`UPDATE sekolah SET migrated_at = datetime('now', '+7 hours') WHERE npsn IN (${placeholdersTidakBerubah})`).bind(...npsnTidakBerubah).run();
-  }
-
   return { baru, diperbarui, tidakBerubah, tanpaNpsn };
 }
