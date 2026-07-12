@@ -290,7 +290,7 @@ export default {
             <table style="width: 100%; min-width: 500px; border-collapse: collapse; font-size: 13px;">
               <thead>
                 <tr style="background: rgba(0,0,0,0.04); color: var(--text-muted); text-transform: uppercase; font-size: 11px; font-weight: 600; letter-spacing: 0.5px;">
-                  <th style="padding: 12px; text-align: left;">Urutan Prioritas</th>
+                  <th style="padding: 12px; text-align: left;">#</th>
                   <th style="padding: 12px; text-align: left;">Provinsi</th>
                   <th style="padding: 12px; text-align: center;">Estimasi Data</th>
                   <th style="padding: 12px; text-align: center;">Status Eksekusi</th>
