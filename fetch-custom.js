@@ -220,6 +220,7 @@ async function fetchCustomData() {
             } catch (err) {
               console.log(`Gagal memanggil /mark-synced: ${err.message}`);
             }
+          }
         }
       } else {
         console.log(`Gagal mem-parsing data Smart Sync. Akan menyinkronkan target secara default.`);
