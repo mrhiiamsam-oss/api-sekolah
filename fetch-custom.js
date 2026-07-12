@@ -176,7 +176,68 @@ async function fetchCustomData() {
           return maxDiffB - maxDiffA;
         });
 
+        // 🌟 FITUR BARU: SMART PRE-SCAN 🌟
+        // Sebelum kita benar-benar menyinkronkan (yang memakan banyak waktu dan kuota DB),
+        // kita lakukan pre-scan API untuk menghitung npsn valid.
+        const trulyDiffCodes = [];
         for (const p of diffCodes) {
+          console.log(`\n🔍 Memulai Smart Pre-Scan untuk provinsi ${p.nama} (Kode: ${p.kode}) ...`);
+          let preScanOffset = 0;
+          let validNpsnSet = new Set();
+          let emptyNpsnCount = 0;
+          let hasMore = true;
+          
+          while (hasMore) {
+            try {
+              const url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${p.kode}?limit=100&offset=${preScanOffset}`;
+              const res = await fetch(url);
+              const result = await res.json();
+              const items = result.data || [];
+              
+              if (items.length === 0) {
+                hasMore = false;
+                break;
+              }
+              
+              items.forEach(item => {
+                if (!item.npsn || item.npsn.trim() === '' || item.npsn === '-') {
+                  emptyNpsnCount++;
+                } else {
+                  validNpsnSet.add(item.npsn);
+                }
+              });
+              
+              preScanOffset += items.length;
+              if (preScanOffset >= (result.meta ? result.meta.total : 0)) {
+                hasMore = false;
+              }
+            } catch (err) {
+              console.log(`⚠️ Error pre-scan offset ${preScanOffset}: ${err.message}`);
+              hasMore = false;
+            }
+          }
+          
+          const trueApiCount = validNpsnSet.size;
+          const apiDuplicates = p.total_api - trueApiCount;
+          const trueSelisih = trueApiCount - p.total_db;
+          
+          console.log(`   └─ Hasil Pre-Scan: Total API Asli: ${p.total_api}, NPSN Unik & Valid: ${trueApiCount}, Total DB: ${p.total_db}`);
+          
+          if (trueSelisih === 0) {
+             console.log(`   ✅ BERBEDA PALSU! Selisih murni 0. Data API kotor (NPSN ganda/kosong). Tidak perlu disinkronisasi.`);
+             syncedCodes.push({
+               kode: p.kode,
+               nama: p.nama,
+               api_duplicates: apiDuplicates,
+               api_empty_npsn: emptyNpsnCount
+             });
+          } else {
+             console.log(`   ❌ Selisih Nyata: ${trueSelisih}. Provinsi ini akan masuk antrean sinkronisasi.`);
+             trulyDiffCodes.push(p);
+          }
+        }
+
+        for (const p of trulyDiffCodes) {
           if (totalDataSaatIni + p.total_api <= BATAS_AMAN_DATA_PER_HARI) {
             finalTargets.push(p.kode);
             totalDataSaatIni += p.total_api;
@@ -206,21 +267,22 @@ async function fetchCustomData() {
         }
 
         // Tandai provinsi yang di-skip karena sudah sinkron ke database agar mendapat centang hijau di Dashboard
-        skippedProvinces = syncedCodes.map(d => d.kode);
-        if (skippedProvinces.length > 0) {
-          const provNames = skippedProvinces.map(k => k === "350000" ? "LUAR NEGERI" : (PROVINCES[k] || "")).filter(n => n);
-          if (provNames.length > 0) {
-            console.log(`Menandai ${provNames.length} provinsi sebagai sinkron di database...`);
+        const objectsToSync = syncedCodes.map(d => {
+           const provName = d.kode === "350000" ? "LUAR NEGERI" : (PROVINCES[d.kode] || "");
+           return provName ? { nama: provName, api_duplicates: d.api_duplicates || 0, api_empty_npsn: d.api_empty_npsn || 0 } : null;
+        }).filter(n => n);
+
+        if (objectsToSync.length > 0) {
+            console.log(`Menandai ${objectsToSync.length} provinsi sebagai sinkron di database (termasuk yang "Berbeda Palsu")...`);
             try {
               await fetch(`${WORKER_URL}/mark-synced`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
-                body: JSON.stringify({ provinsiList: provNames })
+                body: JSON.stringify({ provinsiList: objectsToSync })
               });
             } catch (err) {
               console.log(`Gagal memanggil /mark-synced: ${err.message}`);
             }
-          }
         }
       } else {
         console.log(`Gagal mem-parsing data Smart Sync. Akan menyinkronkan target secara default.`);

@@ -1099,14 +1099,29 @@ export default {
         const body = await request.json();
         if (body.provinsiList && Array.isArray(body.provinsiList)) {
           await env.DB.prepare(`CREATE TABLE IF NOT EXISTS provinsi_sync_status (nama_provinsi TEXT PRIMARY KEY, terakhir_sukses TIMESTAMPTZ)`).run();
+          
+          try {
+            await env.DB.prepare(`ALTER TABLE provinsi_sync_status ADD COLUMN api_duplicates INTEGER DEFAULT 0`).run();
+          } catch(e) {}
+          try {
+            await env.DB.prepare(`ALTER TABLE provinsi_sync_status ADD COLUMN api_empty_npsn INTEGER DEFAULT 0`).run();
+          } catch(e) {}
 
           const stmt = env.DB.prepare(`
-            INSERT INTO provinsi_sync_status (nama_provinsi, terakhir_sukses)
-            VALUES (?, datetime('now', '+7 hours'))
-            ON CONFLICT(nama_provinsi) DO UPDATE SET terakhir_sukses = excluded.terakhir_sukses
+            INSERT INTO provinsi_sync_status (nama_provinsi, terakhir_sukses, api_duplicates, api_empty_npsn)
+            VALUES (?, datetime('now', '+7 hours'), COALESCE(?, 0), COALESCE(?, 0))
+            ON CONFLICT(nama_provinsi) DO UPDATE SET 
+              terakhir_sukses = excluded.terakhir_sukses,
+              api_duplicates = excluded.api_duplicates,
+              api_empty_npsn = excluded.api_empty_npsn
           `);
 
-          const batch = body.provinsiList.map(p => stmt.bind(p));
+          const batch = body.provinsiList.map(p => {
+             if (typeof p === 'object' && p.nama) {
+                 return stmt.bind(p.nama, p.api_duplicates || 0, p.api_empty_npsn || 0);
+             }
+             return stmt.bind(p, 0, 0);
+          });
           await env.DB.batch(batch);
         }
         return Response.json({ ok: true });
