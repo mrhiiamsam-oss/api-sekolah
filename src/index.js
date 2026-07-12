@@ -164,18 +164,45 @@ export default {
           compareHtml = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted);">Belum ada data perbandingan. Jalankan cron terlebih dahulu.</td></tr>';
         }
 
-        const todayDateWIB = new Date(new Date().getTime() + 7 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const currentDate = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
+        const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+        const dayOfWeek = firstDayOfMonth.getDay() || 7;
+        const weekOfMonth = Math.ceil((currentDate.getDate() + dayOfWeek - 1) / 7);
+        const isMandatoryUpdateWeek = (weekOfMonth === 2 || weekOfMonth === 4);
+        
+        const SCHEDULE = {
+          1: ["JAWA BARAT", "GORONTALO", "SULAWESI BARAT"],
+          2: ["JAWA TIMUR", "KEPULAUAN BANGKA BELITUNG", "KALIMANTAN UTARA"],
+          3: ["JAWA TENGAH", "BANTEN", "KEPULAUAN RIAU", "PAPUA BARAT", "PAPUA BARAT DAYA"],
+          4: ["SUMATERA UTARA", "DKI JAKARTA", "ACEH", "JAMBI", "PAPUA", "PAPUA SELATAN"],
+          5: ["SUMATERA SELATAN", "LAMPUNG", "RIAU", "SUMATERA BARAT", "PAPUA TENGAH", "PAPUA PEGUNUNGAN"],
+          6: ["SULAWESI SELATAN", "SULAWESI TENGGARA", "SULAWESI TENGAH", "SULAWESI UTARA", "KALIMANTAN TIMUR", "MALUKU", "DI YOGYAKARTA", "MALUKU UTARA"],
+          7: ["KALIMANTAN BARAT", "KALIMANTAN SELATAN", "KALIMANTAN TENGAH", "NUSA TENGGARA TIMUR", "NUSA TENGGARA BARAT", "LUAR NEGERI", "BALI", "BENGKULU"]
+        };
+        const currentDayOfWeek = currentDate.getDay() || 7;
+        const todaySchedule = SCHEDULE[currentDayOfWeek];
+
+        const todayDateWIB = currentDate.toISOString().split('T')[0];
         const diffData = compareCache && compareCache.value ? compareCache.value.filter(d => {
-          if (Math.abs(d.selisih) === 0 && Math.abs(d.raw_selisih || 0) === 0) return false;
           if (d.terakhir_sukses && d.terakhir_sukses.split(' ')[0] === todayDateWIB) return false;
-          return true;
+          
+          if (isMandatoryUpdateWeek) {
+            return todaySchedule.includes(d.nama);
+          } else {
+            if (Math.abs(d.selisih) === 0 && Math.abs(d.raw_selisih || 0) === 0) return false;
+            return true;
+          }
         }) : [];
         
-        diffData.sort((a, b) => {
-          const maxDiffA = Math.max(Math.abs(a.selisih), Math.abs(a.raw_selisih || 0));
-          const maxDiffB = Math.max(Math.abs(b.selisih), Math.abs(b.raw_selisih || 0));
-          return maxDiffB - maxDiffA;
-        });
+        if (isMandatoryUpdateWeek) {
+           diffData.sort((a, b) => todaySchedule.indexOf(a.nama) - todaySchedule.indexOf(b.nama));
+        } else {
+           diffData.sort((a, b) => {
+             const maxDiffA = Math.max(Math.abs(a.selisih), Math.abs(a.raw_selisih || 0));
+             const maxDiffB = Math.max(Math.abs(b.selisih), Math.abs(b.raw_selisih || 0));
+             return maxDiffB - maxDiffA;
+           });
+        }
 
         const BATAS_AMAN = 70000;
         const syncedToday = compareCache && compareCache.synced_today ? compareCache.synced_today : 0;
@@ -195,7 +222,21 @@ export default {
            }
         }
         
+        let bannerHtml = '';
+        if (isMandatoryUpdateWeek) {
+          bannerHtml = `
+            <div style="background: rgba(255, 193, 7, 0.1); border: 1px solid var(--warning); padding: 12px; border-radius: 8px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 24px;">📅</span>
+              <div>
+                <div style="color: var(--warning); font-weight: 600; font-size: 14px;">Pembaruan Menyeluruh Aktif! (Minggu ke-${weekOfMonth})</div>
+                <div style="color: var(--text-muted); font-size: 12px; margin-top: 2px;">Jadwal hari ini (Hari ke-${currentDayOfWeek}): ${todaySchedule.join(', ')}</div>
+              </div>
+            </div>
+          `;
+        }
+
         const queueHtml = `
+          ${bannerHtml}
           <h2 style="font-size: 16px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
             <span style="font-size: 20px;">🤖</span> Antrean Smart Sync (Otomatis)
           </h2>
