@@ -601,6 +601,10 @@ export default {
             const compareBody = document.getElementById('compare-body');
             const newCompareBody = doc.getElementById('compare-body');
             if (compareBody && newCompareBody) {
+              if (isShowAll) {
+                const newRows = newCompareBody.querySelectorAll('.hidden-row');
+                newRows.forEach(r => r.style.display = 'table-row');
+              }
               compareBody.innerHTML = newCompareBody.innerHTML;
             }
             
