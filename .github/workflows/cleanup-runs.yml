@@ -1,0 +1,49 @@
+name: Auto Cleanup Workflow Runs
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Berjalan otomatis tiap tengah malam
+  workflow_dispatch: # Bisa dijalankan manual via tombol di GitHub
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hapus workflow yang dibatalkan (cancelled)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Mencari workflow runs dengan status cancelled..."
+          # Mengambil 100 run terakhir yang berstatus cancelled
+          run_ids=$(gh api repos/${{ github.repository }}/actions/runs?status=cancelled\&per_page=100 -q ".workflow_runs[].id")
+          
+          for id in $run_ids; do
+            echo "Menghapus run cancelled: $id"
+            gh api -X DELETE repos/${{ github.repository }}/actions/runs/$id --silent || true
+          done
+
+      - name: Sisakan hanya 7 runs terbaru per workflow (Sukses/Gagal)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Dapatkan semua workflow ID di repository ini
+          workflows=$(gh api repos/${{ github.repository }}/actions/workflows -q ".workflows[].id")
+          
+          for wf_id in $workflows; do
+            echo "Memeriksa workflow ID: $wf_id"
+            
+            # Ambil 100 run terakhir per workflow, urutkan dari yang terbaru,
+            # lewati 7 yang pertama (dipertahankan), dan ambil ID sisanya untuk dihapus
+            runs_to_delete=$(gh api repos/${{ github.repository }}/actions/workflows/$wf_id/runs?per_page=100 -q "if .workflow_runs then .workflow_runs | sort_by(.created_at) | reverse | .[7:][].id else empty end")
+            
+            for run_id in $runs_to_delete; do
+              if [ -n "$run_id" ]; then
+                echo "Menghapus run lama: $run_id"
+                gh api -X DELETE repos/${{ github.repository }}/actions/runs/$run_id --silent || true
+              fi
+            done
+          done
