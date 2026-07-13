@@ -1074,7 +1074,7 @@ export default {
               const deletedNpsns = Array.from(dbNpsnSet);
               if (deletedNpsns.length > 0) {
                 // Eksekusi penghapusan dalam chunk untuk menghindari limit parameter bind SQLite
-                const chunkSize = 100;
+                const chunkSize = 50;
                 for (let i = 0; i < deletedNpsns.length; i += chunkSize) {
                   const chunk = deletedNpsns.slice(i, i + chunkSize);
                   const placeholders = chunk.map(() => '?').join(',');
