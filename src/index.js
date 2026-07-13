@@ -1063,8 +1063,18 @@ export default {
             if (body.activeNpsnList && body.activeNpsnList.length > 0) {
               const searchProv = body.namaProvinsi === 'LUAR NEGERI' ? 'LUAR NEGERI' : `PROV. ${body.namaProvinsi}`;
 
-              // Ambil semua NPSN yang ada di database untuk provinsi ini
-              const { results: dbSchools } = await env.DB.prepare(`SELECT npsn FROM sekolah WHERE nama_provinsi = ?`).bind(searchProv).all();
+              let querySelect = `SELECT npsn FROM sekolah WHERE nama_provinsi = ?`;
+              const selectParams = [searchProv];
+              
+              const isAllForms = body.bentukList && body.bentukList.includes('ALL');
+              let bentukUppercase = [];
+              if (!isAllForms && body.bentukList && body.bentukList.length > 0) {
+                 bentukUppercase = body.bentukList.map(b => b.toUpperCase());
+                 const placeholders = bentukUppercase.map(() => '?').join(',');
+                 querySelect += ` AND bentuk IN (${placeholders})`;
+                 selectParams.push(...bentukUppercase);
+              }
+              const { results: dbSchools } = await env.DB.prepare(querySelect).bind(...selectParams).all();
 
               const dbNpsnSet = new Set((dbSchools || []).map(r => r.npsn));
 
@@ -1077,8 +1087,16 @@ export default {
                 const chunkSize = 50;
                 for (let i = 0; i < deletedNpsns.length; i += chunkSize) {
                   const chunk = deletedNpsns.slice(i, i + chunkSize);
-                  const placeholders = chunk.map(() => '?').join(',');
-                  const delRes = await env.DB.prepare(`DELETE FROM sekolah WHERE npsn IN (${placeholders}) AND nama_provinsi = ?`).bind(...chunk, searchProv).run();
+                  
+                  let queryDelete = `DELETE FROM sekolah WHERE npsn IN (${chunk.map(() => '?').join(',')}) AND nama_provinsi = ?`;
+                  const deleteParams = [...chunk, searchProv];
+                  if (!isAllForms && bentukUppercase.length > 0) {
+                     const bentukPlaceholders = bentukUppercase.map(() => '?').join(',');
+                     queryDelete += ` AND bentuk IN (${bentukPlaceholders})`;
+                     deleteParams.push(...bentukUppercase);
+                  }
+                  
+                  const delRes = await env.DB.prepare(queryDelete).bind(...deleteParams).run();
                   stats.dihapus += delRes.meta.changes;
                 }
               }
