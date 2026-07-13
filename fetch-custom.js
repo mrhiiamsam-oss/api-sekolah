@@ -161,152 +161,156 @@ async function fetchCustomData() {
 
   // --- SMART SYNC FILTER ---
   let skippedProvinces = [];
-  try {
-    console.log(`Mengambil data perbandingan (Smart Sync) dari ${WORKER_URL}/api/compare?cron=true...`);
-    const compareRes = await fetch(`${WORKER_URL}/api/compare?cron=true`);
-    if (compareRes.ok) {
-      const compareJson = await compareRes.json();
-      if (compareJson.success && compareJson.data) {
-        // Cek semua provinsi yang ada selisih (selisih != 0)
-        // Kita gunakan raw_selisih jika ada (untuk mendeteksi npsn ganda/kosong), atau selisih biasa
-        // Kedua hal ini menandakan ketidaksinkronan data.
-        const currentDate = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
-        const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-        const currentDayOfWeek = currentDate.getDay() || 7;
-        const isMandatoryUpdateDay = (currentDayOfWeek === 3 || currentDayOfWeek === 4);
-        
-        const SCHEDULE = {
-          3: ["JAWA TIMUR", "JAWA TENGAH", "BANTEN", "LAMPUNG", "NUSA TENGGARA TIMUR", "RIAU", "SUMATERA BARAT", "DKI JAKARTA", "JAMBI", "DI YOGYAKARTA", "SULAWESI TENGGARA", "SULAWESI UTARA", "MALUKU", "MALUKU UTARA", "KEPULAUAN RIAU", "KEPULAUAN BANGKA BELITUNG", "PAPUA PEGUNUNGAN", "PAPUA TENGAH", "PAPUA BARAT DAYA", "LUAR NEGERI"],
-          4: ["JAWA BARAT", "SUMATERA UTARA", "SULAWESI SELATAN", "SUMATERA SELATAN", "NUSA TENGGARA BARAT", "ACEH", "KALIMANTAN BARAT", "KALIMANTAN SELATAN", "SULAWESI TENGAH", "KALIMANTAN TENGAH", "KALIMANTAN TIMUR", "BALI", "BENGKULU", "SULAWESI BARAT", "GORONTALO", "PAPUA", "KALIMANTAN UTARA", "PAPUA BARAT", "PAPUA SELATAN"]
-        };
-
-        if (isCronSchedule) {
-          if (isMandatoryUpdateDay) {
-            console.log("🌟 Mode Full Sync Harian aktif! Memproses jadwal provinsi hari ini.");
-            const scheduledNames = SCHEDULE[currentDayOfWeek];
-            kodeWilayahList = scheduledNames.map(name => {
-               return Object.keys(PROVINCES).find(k => PROVINCES[k] === name);
-            }).filter(k => k);
-          } else {
-            console.log("🌟 Mode Smart Sync Global aktif! Mengabaikan jadwal harian dan memprioritaskan selisih terbesar dari SELURUH provinsi.");
-            kodeWilayahList = Object.keys(PROVINCES);
-          }
-        }
-
-        const diffCodes = compareJson.data.filter(d => {
-          if (!kodeWilayahList.includes(d.kode)) return false;
+  if (isCronSchedule) {
+    try {
+      console.log(`Mengambil data perbandingan (Smart Sync) dari ${WORKER_URL}/api/compare?cron=true...`);
+      const compareRes = await fetch(`${WORKER_URL}/api/compare?cron=true`);
+      if (compareRes.ok) {
+        const compareJson = await compareRes.json();
+        if (compareJson.success && compareJson.data) {
+          // Cek semua provinsi yang ada selisih (selisih != 0)
+          // Kita gunakan raw_selisih jika ada (untuk mendeteksi npsn ganda/kosong), atau selisih biasa
+          // Kedua hal ini menandakan ketidaksinkronan data.
+          const currentDate = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
+          const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+          const currentDayOfWeek = currentDate.getDay() || 7;
+          const isMandatoryUpdateDay = (currentDayOfWeek === 3 || currentDayOfWeek === 4);
           
-          const isSynced = Math.abs(d.selisih) === 0 || d.is_sinkron_walau_selisih;
-          if (isSynced && !isMandatoryUpdateDay) return false;
+          const SCHEDULE = {
+            3: ["JAWA TIMUR", "JAWA TENGAH", "BANTEN", "LAMPUNG", "NUSA TENGGARA TIMUR", "RIAU", "SUMATERA BARAT", "DKI JAKARTA", "JAMBI", "DI YOGYAKARTA", "SULAWESI TENGGARA", "SULAWESI UTARA", "MALUKU", "MALUKU UTARA", "KEPULAUAN RIAU", "KEPULAUAN BANGKA BELITUNG", "PAPUA PEGUNUNGAN", "PAPUA TENGAH", "PAPUA BARAT DAYA", "LUAR NEGERI"],
+            4: ["JAWA BARAT", "SUMATERA UTARA", "SULAWESI SELATAN", "SUMATERA SELATAN", "NUSA TENGGARA BARAT", "ACEH", "KALIMANTAN BARAT", "KALIMANTAN SELATAN", "SULAWESI TENGAH", "KALIMANTAN TENGAH", "KALIMANTAN TIMUR", "BALI", "BENGKULU", "SULAWESI BARAT", "GORONTALO", "PAPUA", "KALIMANTAN UTARA", "PAPUA BARAT", "PAPUA SELATAN"]
+          };
+  
+          if (isCronSchedule) {
+            if (isMandatoryUpdateDay) {
+              console.log("🌟 Mode Full Sync Harian aktif! Memproses jadwal provinsi hari ini.");
+              const scheduledNames = SCHEDULE[currentDayOfWeek];
+              kodeWilayahList = scheduledNames.map(name => {
+                 return Object.keys(PROVINCES).find(k => PROVINCES[k] === name);
+              }).filter(k => k);
+            } else {
+              console.log("🌟 Mode Smart Sync Global aktif! Mengabaikan jadwal harian dan memprioritaskan selisih terbesar dari SELURUH provinsi.");
+              kodeWilayahList = Object.keys(PROVINCES);
+            }
+          }
+  
+          const diffCodes = compareJson.data.filter(d => {
+            if (!kodeWilayahList.includes(d.kode)) return false;
+            
+            const isSynced = Math.abs(d.selisih) === 0 || d.is_sinkron_walau_selisih;
+            if (isSynced && !isMandatoryUpdateDay) return false;
+            
+            if (isCronSchedule && d.terakhir_sukses) {
+              const todayDate = currentDate.toISOString().split('T')[0];
+              const syncedDate = d.terakhir_sukses.split(' ')[0];
+              if (syncedDate === todayDate) {
+                console.log(`✅ ${d.nama} diabaikan (Sudah tersinkronisasi hari ini)`);
+                return false;
+              }
+            }
+            return true;
+          });
+          const syncedCodes = compareJson.data.filter(d => d.selisih === 0 && (d.raw_selisih || 0) === 0 && kodeWilayahList.includes(d.kode));
+  
+          // Kuota aman penulisan baris per hari untuk Cloudflare D1 Free.
+          const BATAS_AMAN_DATA_PER_HARI = 500000; 
           
-          if (isCronSchedule && d.terakhir_sukses) {
-            const todayDate = currentDate.toISOString().split('T')[0];
-            const syncedDate = d.terakhir_sukses.split(' ')[0];
-            if (syncedDate === todayDate) {
-              console.log(`✅ ${d.nama} diabaikan (Sudah tersinkronisasi hari ini)`);
-              return false;
-            }
-          }
-          return true;
-        });
-        const syncedCodes = compareJson.data.filter(d => d.selisih === 0 && (d.raw_selisih || 0) === 0 && kodeWilayahList.includes(d.kode));
-
-        // Kuota aman penulisan baris per hari untuk Cloudflare D1 Free.
-        const BATAS_AMAN_DATA_PER_HARI = 500000; 
-        
-        let totalDataSaatIni = compareJson.synced_today || 0;
-        let finalTargets = [];
-
-        console.log(`📊 Kuota yang sudah terpakai hari ini: ${totalDataSaatIni.toLocaleString('id-ID')} / ${BATAS_AMAN_DATA_PER_HARI.toLocaleString('id-ID')}`);
-
-        // Urutkan provinsi berdasarkan aturan prioritas:
-        if (isMandatoryUpdateDay && isCronSchedule) {
-          diffCodes.sort((a, b) => {
-             const scheduleArr = SCHEDULE[currentDayOfWeek] || [];
-             return scheduleArr.indexOf(a.nama) - scheduleArr.indexOf(b.nama);
-          });
-        } else {
-          diffCodes.sort((a, b) => {
-            const aHasSynced = a.terakhir_sukses ? 1 : 0;
-            const bHasSynced = b.terakhir_sukses ? 1 : 0;
-            
-            if (aHasSynced !== bHasSynced) {
-              return aHasSynced - bHasSynced; // 0 (belum sinkron) duluan
-            }
-
-            const aIsDifferent = (Math.abs(a.selisih) > 0 && !a.is_sinkron_walau_selisih) ? 1 : 0;
-            const bIsDifferent = (Math.abs(b.selisih) > 0 && !b.is_sinkron_walau_selisih) ? 1 : 0;
-            
-            if (aIsDifferent !== bIsDifferent) {
-               return bIsDifferent - aIsDifferent; // 1 (berbeda) duluan
-            }
-            
-            if (aHasSynced && bHasSynced) {
-               const timeA = new Date(a.terakhir_sukses).getTime();
-               const timeB = new Date(b.terakhir_sukses).getTime();
-               if (timeA !== timeB) return timeA - timeB; // Terlama duluan agar bergiliran
-            }
-
-            const maxDiffA = Math.abs(a.selisih);
-            const maxDiffB = Math.abs(b.selisih);
-            return maxDiffB - maxDiffA; // Sisanya urutkan berdasarkan selisih terbesar
-          });
-        }
-
-        for (const p of diffCodes) {
-          if (totalDataSaatIni + p.total_api <= BATAS_AMAN_DATA_PER_HARI) {
-            finalTargets.push(p.kode);
-            totalDataSaatIni += p.total_api;
-          } else if (finalTargets.length === 0 && totalDataSaatIni < BATAS_AMAN_DATA_PER_HARI) {
-            // Jika kita belum menambahkan target sama sekali, DAN kuota harian BELUM sepenuhnya habis.
-            // Kita eksekusi item pertama meskipun akan sedikit melebihi limit.
-            finalTargets.push(p.kode);
-            totalDataSaatIni += p.total_api;
-            break;
+          let totalDataSaatIni = compareJson.synced_today || 0;
+          let finalTargets = [];
+  
+          console.log(`📊 Kuota yang sudah terpakai hari ini: ${totalDataSaatIni.toLocaleString('id-ID')} / ${BATAS_AMAN_DATA_PER_HARI.toLocaleString('id-ID')}`);
+  
+          // Urutkan provinsi berdasarkan aturan prioritas:
+          if (isMandatoryUpdateDay && isCronSchedule) {
+            diffCodes.sort((a, b) => {
+               const scheduleArr = SCHEDULE[currentDayOfWeek] || [];
+               return scheduleArr.indexOf(a.nama) - scheduleArr.indexOf(b.nama);
+            });
           } else {
-            // Kuota harian sudah penuh
-            break;
+            diffCodes.sort((a, b) => {
+              const aHasSynced = a.terakhir_sukses ? 1 : 0;
+              const bHasSynced = b.terakhir_sukses ? 1 : 0;
+              
+              if (aHasSynced !== bHasSynced) {
+                return aHasSynced - bHasSynced; // 0 (belum sinkron) duluan
+              }
+  
+              const aIsDifferent = (Math.abs(a.selisih) > 0 && !a.is_sinkron_walau_selisih) ? 1 : 0;
+              const bIsDifferent = (Math.abs(b.selisih) > 0 && !b.is_sinkron_walau_selisih) ? 1 : 0;
+              
+              if (aIsDifferent !== bIsDifferent) {
+                 return bIsDifferent - aIsDifferent; // 1 (berbeda) duluan
+              }
+              
+              if (aHasSynced && bHasSynced) {
+                 const timeA = new Date(a.terakhir_sukses).getTime();
+                 const timeB = new Date(b.terakhir_sukses).getTime();
+                 if (timeA !== timeB) return timeA - timeB; // Terlama duluan agar bergiliran
+              }
+  
+              const maxDiffA = Math.abs(a.selisih);
+              const maxDiffB = Math.abs(b.selisih);
+              return maxDiffB - maxDiffA; // Sisanya urutkan berdasarkan selisih terbesar
+            });
           }
-        }
-
-        if (finalTargets.length === 0) {
-          console.log(`✅ SEMUA PROVINSI SUDAH SINKRON. Tidak ada yang perlu disinkronkan. Membatalkan sinkronisasi untuk menghemat resource.`);
-          kodeWilayahList = [];
-        } else {
-          const targetNames = finalTargets.map(k => k === "350000" ? "LUAR NEGERI" : (PROVINCES[k] || k));
-          console.log(`🚀 Smart Sync Cerdas mendeteksi ${diffCodes.length} provinsi dengan data tidak sinkron.`);
-          console.log(`   Memilih ${finalTargets.length} provinsi [${targetNames.join(', ')}] untuk disinkronisasi hari ini dengan estimasi ~${totalDataSaatIni.toLocaleString('id-ID')} data.`);
-          if (diffCodes.length > finalTargets.length) {
-             console.log(`   ⚠️ Sisa ${diffCodes.length - finalTargets.length} provinsi akan otomatis antre untuk dieksekusi besok karena batas aman harian (${BATAS_AMAN_DATA_PER_HARI.toLocaleString('id-ID')} data).`);
-          }
-          kodeWilayahList = finalTargets;
-        }
-
-        // Tandai provinsi yang di-skip karena sudah sinkron ke database agar mendapat centang hijau di Dashboard
-        skippedProvinces = syncedCodes.map(d => d.kode);
-        if (skippedProvinces.length > 0) {
-          const provNames = skippedProvinces.map(k => k === "350000" ? "LUAR NEGERI" : (PROVINCES[k] || "")).filter(n => n);
-          if (provNames.length > 0) {
-            console.log(`Menandai ${provNames.length} provinsi sebagai sinkron di database...`);
-            try {
-              await fetch(`${WORKER_URL}/mark-synced`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
-                body: JSON.stringify({ provinsiList: provNames })
-              });
-            } catch (err) {
-              console.log(`Gagal memanggil /mark-synced: ${err.message}`);
+  
+          for (const p of diffCodes) {
+            if (totalDataSaatIni + p.total_api <= BATAS_AMAN_DATA_PER_HARI) {
+              finalTargets.push(p.kode);
+              totalDataSaatIni += p.total_api;
+            } else if (finalTargets.length === 0 && totalDataSaatIni < BATAS_AMAN_DATA_PER_HARI) {
+              // Jika kita belum menambahkan target sama sekali, DAN kuota harian BELUM sepenuhnya habis.
+              // Kita eksekusi item pertama meskipun akan sedikit melebihi limit.
+              finalTargets.push(p.kode);
+              totalDataSaatIni += p.total_api;
+              break;
+            } else {
+              // Kuota harian sudah penuh
+              break;
             }
           }
+  
+          if (finalTargets.length === 0) {
+            console.log(`✅ SEMUA PROVINSI SUDAH SINKRON. Tidak ada yang perlu disinkronkan. Membatalkan sinkronisasi untuk menghemat resource.`);
+            kodeWilayahList = [];
+          } else {
+            const targetNames = finalTargets.map(k => k === "350000" ? "LUAR NEGERI" : (PROVINCES[k] || k));
+            console.log(`🚀 Smart Sync Cerdas mendeteksi ${diffCodes.length} provinsi dengan data tidak sinkron.`);
+            console.log(`   Memilih ${finalTargets.length} provinsi [${targetNames.join(', ')}] untuk disinkronisasi hari ini dengan estimasi ~${totalDataSaatIni.toLocaleString('id-ID')} data.`);
+            if (diffCodes.length > finalTargets.length) {
+               console.log(`   ⚠️ Sisa ${diffCodes.length - finalTargets.length} provinsi akan otomatis antre untuk dieksekusi besok karena batas aman harian (${BATAS_AMAN_DATA_PER_HARI.toLocaleString('id-ID')} data).`);
+            }
+            kodeWilayahList = finalTargets;
+          }
+  
+          // Tandai provinsi yang di-skip karena sudah sinkron ke database agar mendapat centang hijau di Dashboard
+          skippedProvinces = syncedCodes.map(d => d.kode);
+          if (skippedProvinces.length > 0) {
+            const provNames = skippedProvinces.map(k => k === "350000" ? "LUAR NEGERI" : (PROVINCES[k] || "")).filter(n => n);
+            if (provNames.length > 0) {
+              console.log(`Menandai ${provNames.length} provinsi sebagai sinkron di database...`);
+              try {
+                await fetch(`${WORKER_URL}/mark-synced`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
+                  body: JSON.stringify({ provinsiList: provNames })
+                });
+              } catch (err) {
+                console.log(`Gagal memanggil /mark-synced: ${err.message}`);
+              }
+            }
+          }
+        } else {
+          console.log(`Gagal mem-parsing data Smart Sync. Akan menyinkronkan target secara default.`);
         }
       } else {
-        console.log(`Gagal mem-parsing data Smart Sync. Akan menyinkronkan target secara default.`);
+        console.log(`Gagal menghubungi API Smart Sync. Akan menyinkronkan target secara default.`);
       }
-    } else {
-      console.log(`Gagal menghubungi API Smart Sync. Akan menyinkronkan target secara default.`);
+    } catch (e) {
+      console.log(`Error saat mengecek Smart Sync: ${e.message}. Akan menyinkronkan target secara default.`);
     }
-  } catch (e) {
-    console.log(`Error saat mengecek Smart Sync: ${e.message}. Akan menyinkronkan target secara default.`);
+  } else {
+    console.log(`🌟 Sinkronisasi manual terdeteksi (Mode Cron: false). Melewati filter Smart Sync untuk menarik ulang data secara penuh.`);
   }
 
   if (kodeWilayahList.length === 0) return;
