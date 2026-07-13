@@ -40,6 +40,7 @@ jobs:
           if [ "${{ github.event.inputs.pilihan_provinsi }}" != "" ]; then
             PROVINSI="${{ github.event.inputs.pilihan_provinsi }}"
             echo "Menjalankan manual untuk provinsi: $PROVINSI"
+            echo "IS_CRON=false" >> $GITHUB_ENV
           else
             case $DAY_OF_WEEK in
               1) PROVINSI="JAWA BARAT, GORONTALO, SULAWESI BARAT" ;;
@@ -51,6 +52,7 @@ jobs:
               7) PROVINSI="KALIMANTAN BARAT, KALIMANTAN SELATAN, KALIMANTAN TENGAH, NUSA TENGGARA TIMUR, NUSA TENGGARA BARAT, LUAR NEGERI, BALI, BENGKULU" ;;
             esac
             echo "Jadwal Hari $DAY_OF_WEEK: Menjalankan provinsi: $PROVINSI"
+            echo "IS_CRON=true" >> $GITHUB_ENV
           fi
           
           echo "TARGET_PROVINSI=$PROVINSI" >> $GITHUB_ENV
@@ -62,5 +64,5 @@ jobs:
           PILIHAN_BENTUK: "Semua"
           PILIHAN_PROVINSI: ${{ env.TARGET_PROVINSI }}
           MULAI_DARI_AWAL: "true"
-          IS_CRON_SCHEDULE: "true"
+          IS_CRON_SCHEDULE: ${{ env.IS_CRON }}
         run: node fetch-custom.js
