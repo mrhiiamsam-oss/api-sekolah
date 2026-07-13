@@ -1071,7 +1071,7 @@ export default {
               if (!isAllForms && body.bentukList && body.bentukList.length > 0) {
                  bentukUppercase = body.bentukList.map(b => b.toUpperCase());
                  const placeholders = bentukUppercase.map(() => '?').join(',');
-                 querySelect += ` AND bentuk IN (${placeholders})`;
+                 querySelect += ` AND bentuk_pendidikan IN (${placeholders})`;
                  selectParams.push(...bentukUppercase);
               }
               const { results: dbSchools } = await env.DB.prepare(querySelect).bind(...selectParams).all();
@@ -1092,7 +1092,7 @@ export default {
                   const deleteParams = [...chunk, searchProv];
                   if (!isAllForms && bentukUppercase.length > 0) {
                      const bentukPlaceholders = bentukUppercase.map(() => '?').join(',');
-                     queryDelete += ` AND bentuk IN (${bentukPlaceholders})`;
+                     queryDelete += ` AND bentuk_pendidikan IN (${bentukPlaceholders})`;
                      deleteParams.push(...bentukUppercase);
                   }
                   
