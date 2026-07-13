@@ -188,31 +188,23 @@ export default {
         }
 
         const currentDate = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
-        const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-        const dayOfWeek = firstDayOfMonth.getDay() || 7;
-        const weekOfMonth = Math.ceil((currentDate.getDate() + dayOfWeek - 1) / 7);
-        const isMandatoryUpdateWeek = (weekOfMonth === 2 || weekOfMonth === 4);
+        const currentDayOfWeek = currentDate.getDay() || 7;
+        const isMandatoryUpdateDay = (currentDayOfWeek === 3 || currentDayOfWeek === 4);
 
         const SCHEDULE = {
-          1: ["JAWA BARAT", "GORONTALO", "SULAWESI BARAT"],
-          2: ["JAWA TIMUR", "KEPULAUAN BANGKA BELITUNG", "KALIMANTAN UTARA"],
-          3: ["JAWA TENGAH", "BANTEN", "KEPULAUAN RIAU", "PAPUA BARAT", "PAPUA BARAT DAYA"],
-          4: ["SUMATERA UTARA", "DKI JAKARTA", "ACEH", "JAMBI", "PAPUA", "PAPUA SELATAN"],
-          5: ["SUMATERA SELATAN", "LAMPUNG", "RIAU", "SUMATERA BARAT", "PAPUA TENGAH", "PAPUA PEGUNUNGAN"],
-          6: ["SULAWESI SELATAN", "SULAWESI TENGGARA", "SULAWESI TENGAH", "SULAWESI UTARA", "KALIMANTAN TIMUR", "MALUKU", "DI YOGYAKARTA", "MALUKU UTARA"],
-          7: ["KALIMANTAN BARAT", "KALIMANTAN SELATAN", "KALIMANTAN TENGAH", "NUSA TENGGARA TIMUR", "NUSA TENGGARA BARAT", "LUAR NEGERI", "BALI", "BENGKULU"]
+          3: ["JAWA TIMUR", "JAWA TENGAH", "BANTEN", "LAMPUNG", "NUSA TENGGARA TIMUR", "RIAU", "SUMATERA BARAT", "DKI JAKARTA", "JAMBI", "DI YOGYAKARTA", "SULAWESI TENGGARA", "SULAWESI UTARA", "MALUKU", "MALUKU UTARA", "KEPULAUAN RIAU", "KEPULAUAN BANGKA BELITUNG", "PAPUA PEGUNUNGAN", "PAPUA TENGAH", "PAPUA BARAT DAYA", "LUAR NEGERI"],
+          4: ["JAWA BARAT", "SUMATERA UTARA", "SULAWESI SELATAN", "SUMATERA SELATAN", "NUSA TENGGARA BARAT", "ACEH", "KALIMANTAN BARAT", "KALIMANTAN SELATAN", "SULAWESI TENGAH", "KALIMANTAN TENGAH", "KALIMANTAN TIMUR", "BALI", "BENGKULU", "SULAWESI BARAT", "GORONTALO", "PAPUA", "KALIMANTAN UTARA", "PAPUA BARAT", "PAPUA SELATAN"]
         };
-        const currentDayOfWeek = currentDate.getDay() || 7;
-        const nextDayOfWeek = (currentDayOfWeek % 7) + 1;
-        const todaySchedule = SCHEDULE[currentDayOfWeek];
-        const tomorrowSchedule = SCHEDULE[nextDayOfWeek];
+        const nextDayOfWeek = (currentDayOfWeek === 3) ? 4 : 3; // Jika Rabu(3), besok(Kamis 4). Selain itu, antrean berikutnya di hari Rabu(3).
+        const todaySchedule = SCHEDULE[currentDayOfWeek] || [];
+        const tomorrowSchedule = SCHEDULE[nextDayOfWeek] || [];
 
         const todayDateWIB = currentDate.toISOString().split('T')[0];
         const diffData = compareCache && compareCache.value ? compareCache.value.filter(d => {
           const lastSuksesMs = provSyncMap[d.nama];
           d.isSyncedToday = lastSuksesMs && new Date(lastSuksesMs).toISOString().split('T')[0] === todayDateWIB;
 
-          if (isMandatoryUpdateWeek) {
+          if (isMandatoryUpdateDay) {
             return todaySchedule.includes(d.nama) || tomorrowSchedule.includes(d.nama);
           } else {
             if (d.isSyncedToday) return false;
@@ -221,7 +213,7 @@ export default {
           }
         }) : [];
 
-        if (isMandatoryUpdateWeek) {
+        if (isMandatoryUpdateDay) {
           diffData.sort((a, b) => {
             const aIsToday = todaySchedule.includes(a.nama);
             const bIsToday = todaySchedule.includes(b.nama);
@@ -289,13 +281,21 @@ export default {
         }
 
         let bannerHtml = '';
-        if (isMandatoryUpdateWeek) {
+        if (isMandatoryUpdateDay) {
           bannerHtml = `
-            <div style="background: rgba(255, 193, 7, 0.1); border: 1px solid var(--warning); padding: 12px; border-radius: 8px; margin-top: 24px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
-              <span style="font-size: 24px;">📅</span>
-              <div>
-                <div style="color: #f97316; font-weight: 600; font-size: 14px;">Pembaruan Menyeluruh Aktif! (Minggu ke-${weekOfMonth})</div>
-                <div style="color: var(--text-muted); font-size: 12px; margin-top: 2px;">Jadwal hari ini (Hari ke-${currentDayOfWeek}): ${todaySchedule.join(', ')}</div>
+            <div style="background: rgba(99, 102, 241, 0.1); border-left: 4px solid var(--primary); padding: 12px 16px; border-radius: 0 8px 8px 0; margin-bottom: 24px;">
+              <strong style="color: var(--primary);">🗓️ Hari Sinkronisasi Penuh Aktif!</strong>
+              <div style="font-size: 13px; margin-top: 4px; color: var(--text-muted);">
+                Setiap Rabu dan Kamis, sistem memperbarui seluruh provinsi sesuai grup tanpa mengecek perbedaan. Hari ini: <strong>${currentDayOfWeek === 3 ? 'Grup 1 (Rabu)' : 'Grup 2 (Kamis)'}</strong>.
+              </div>
+            </div>
+          `;
+        } else {
+          bannerHtml = `
+            <div style="background: rgba(16, 185, 129, 0.1); border-left: 4px solid var(--success); padding: 12px 16px; border-radius: 0 8px 8px 0; margin-bottom: 24px;">
+              <strong style="color: var(--success);">🧠 Mode Smart Sync Aktif!</strong>
+              <div style="font-size: 13px; margin-top: 4px; color: var(--text-muted);">
+                Di luar hari Rabu dan Kamis, sistem hanya menarik data untuk provinsi yang mendeteksi perbedaan secara cerdas.
               </div>
             </div>
           `;

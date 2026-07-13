@@ -145,20 +145,32 @@ async function fetchCustomData() {
         // Kedua hal ini menandakan ketidaksinkronan data.
         const currentDate = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
         const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-        const dayOfWeek = firstDayOfMonth.getDay() || 7;
-        const weekOfMonth = Math.ceil((currentDate.getDate() + dayOfWeek - 1) / 7);
-        const isMandatoryUpdateWeek = weekOfMonth === 2 || weekOfMonth === 4;
+        const currentDayOfWeek = currentDate.getDay() || 7;
+        const isMandatoryUpdateDay = (currentDayOfWeek === 3 || currentDayOfWeek === 4);
+        
+        const SCHEDULE = {
+          3: ["JAWA TIMUR", "JAWA TENGAH", "BANTEN", "LAMPUNG", "NUSA TENGGARA TIMUR", "RIAU", "SUMATERA BARAT", "DKI JAKARTA", "JAMBI", "DI YOGYAKARTA", "SULAWESI TENGGARA", "SULAWESI UTARA", "MALUKU", "MALUKU UTARA", "KEPULAUAN RIAU", "KEPULAUAN BANGKA BELITUNG", "PAPUA PEGUNUNGAN", "PAPUA TENGAH", "PAPUA BARAT DAYA", "LUAR NEGERI"],
+          4: ["JAWA BARAT", "SUMATERA UTARA", "SULAWESI SELATAN", "SUMATERA SELATAN", "NUSA TENGGARA BARAT", "ACEH", "KALIMANTAN BARAT", "KALIMANTAN SELATAN", "SULAWESI TENGAH", "KALIMANTAN TENGAH", "KALIMANTAN TIMUR", "BALI", "BENGKULU", "SULAWESI BARAT", "GORONTALO", "PAPUA", "KALIMANTAN UTARA", "PAPUA BARAT", "PAPUA SELATAN"]
+        };
 
-        if (isCronSchedule && !isMandatoryUpdateWeek) {
+        if (isCronSchedule) {
+          if (isMandatoryUpdateDay) {
+            console.log("🌟 Mode Full Sync Harian aktif! Memproses jadwal provinsi hari ini.");
+            const scheduledNames = SCHEDULE[currentDayOfWeek];
+            kodeWilayahList = scheduledNames.map(name => {
+               return Object.keys(PROVINCES).find(k => PROVINCES[k] === name);
+            }).filter(k => k);
+          } else {
             console.log("🌟 Mode Smart Sync Global aktif! Mengabaikan jadwal harian dan memprioritaskan selisih terbesar dari SELURUH provinsi.");
             kodeWilayahList = Object.keys(PROVINCES);
+          }
         }
 
         const diffCodes = compareJson.data.filter(d => {
           if (!kodeWilayahList.includes(d.kode)) return false;
           
           const isSynced = Math.abs(d.selisih) === 0 || d.is_sinkron_walau_selisih;
-          if (isSynced && !isMandatoryUpdateWeek) return false;
+          if (isSynced && !isMandatoryUpdateDay) return false;
           
           if (isCronSchedule && d.terakhir_sukses) {
             const todayDate = currentDate.toISOString().split('T')[0];
@@ -181,34 +193,38 @@ async function fetchCustomData() {
         console.log(`📊 Kuota yang sudah terpakai hari ini: ${totalDataSaatIni.toLocaleString('id-ID')} / ${BATAS_AMAN_DATA_PER_HARI.toLocaleString('id-ID')}`);
 
         // Urutkan provinsi berdasarkan aturan prioritas:
-        // 1. Yang berbeda duluan
-        // 2. Yang belum pernah sukses (belum sinkron) diprioritaskan.
-        // 3. Yang sudah di sinkron tapi ada datanya berbeda diletakkan di akhir prioritas, bergiliran (yang terlama duluan).
-        diffCodes.sort((a, b) => {
-          const aHasSynced = a.terakhir_sukses ? 1 : 0;
-          const bHasSynced = b.terakhir_sukses ? 1 : 0;
-          
-          if (aHasSynced !== bHasSynced) {
-            return aHasSynced - bHasSynced; // 0 (belum sinkron) duluan
-          }
+        if (isMandatoryUpdateDay && isCronSchedule) {
+          diffCodes.sort((a, b) => {
+             const scheduleArr = SCHEDULE[currentDayOfWeek] || [];
+             return scheduleArr.indexOf(a.nama) - scheduleArr.indexOf(b.nama);
+          });
+        } else {
+          diffCodes.sort((a, b) => {
+            const aHasSynced = a.terakhir_sukses ? 1 : 0;
+            const bHasSynced = b.terakhir_sukses ? 1 : 0;
+            
+            if (aHasSynced !== bHasSynced) {
+              return aHasSynced - bHasSynced; // 0 (belum sinkron) duluan
+            }
 
-          const aIsDifferent = (Math.abs(a.selisih) > 0 && !a.is_sinkron_walau_selisih) ? 1 : 0;
-          const bIsDifferent = (Math.abs(b.selisih) > 0 && !b.is_sinkron_walau_selisih) ? 1 : 0;
-          
-          if (aIsDifferent !== bIsDifferent) {
-             return bIsDifferent - aIsDifferent; // 1 (berbeda) duluan
-          }
-          
-          if (aHasSynced && bHasSynced) {
-             const timeA = new Date(a.terakhir_sukses).getTime();
-             const timeB = new Date(b.terakhir_sukses).getTime();
-             if (timeA !== timeB) return timeA - timeB; // Terlama duluan agar bergiliran
-          }
+            const aIsDifferent = (Math.abs(a.selisih) > 0 && !a.is_sinkron_walau_selisih) ? 1 : 0;
+            const bIsDifferent = (Math.abs(b.selisih) > 0 && !b.is_sinkron_walau_selisih) ? 1 : 0;
+            
+            if (aIsDifferent !== bIsDifferent) {
+               return bIsDifferent - aIsDifferent; // 1 (berbeda) duluan
+            }
+            
+            if (aHasSynced && bHasSynced) {
+               const timeA = new Date(a.terakhir_sukses).getTime();
+               const timeB = new Date(b.terakhir_sukses).getTime();
+               if (timeA !== timeB) return timeA - timeB; // Terlama duluan agar bergiliran
+            }
 
-          const maxDiffA = Math.abs(a.selisih);
-          const maxDiffB = Math.abs(b.selisih);
-          return maxDiffB - maxDiffA; // Sisanya urutkan berdasarkan selisih terbesar
-        });
+            const maxDiffA = Math.abs(a.selisih);
+            const maxDiffB = Math.abs(b.selisih);
+            return maxDiffB - maxDiffA; // Sisanya urutkan berdasarkan selisih terbesar
+          });
+        }
 
         for (const p of diffCodes) {
           if (totalDataSaatIni + p.total_api <= BATAS_AMAN_DATA_PER_HARI) {
