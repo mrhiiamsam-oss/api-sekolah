@@ -439,7 +439,11 @@ async function fetchCustomData() {
             console.log(`Mengirim ${fullNpsnList.length} NPSN aktif ke Worker untuk deteksi penghapusan data... (Indikasi Bentuk Baru: ${unrecognized_shapes})`);
             if (unrecognized_shapes > 0) {
               console.log(`⚠️ Terdeteksi ${unrecognized_shapes} sekolah dari bentuk pendidikan yang belum terdaftar! Menjalankan Discovery Scan...`);
-              await runDiscoveryScan(kodeWilayah, bentukList);
+              const scanRes = await runDiscoveryScan(kodeWilayah, bentukList, currentTotalEstimasi, fullNpsnList);
+              if (scanRes && scanRes.nonQueryableCount > 0) {
+                unrecognized_shapes -= scanRes.nonQueryableCount;
+                if (unrecognized_shapes < 0) unrecognized_shapes = 0;
+              }
             }
           } else {
             console.log(`Pembersihan dilewati karena provinsi disinkronisasi sebagian pada sesi ini.`);
@@ -511,14 +515,21 @@ async function fetchCustomData() {
   }
 }
 
-async function runDiscoveryScan(kodeWilayah, bentukList) {
+async function runDiscoveryScan(kodeWilayah, bentukList, totalEstimasi, fullNpsnList) {
   let offset = 0;
   const limit = 20;
-  const scannedShapes = new Set(bentukList);
+  const scannedShapes = new Set(bentukList.map(b => b.replace(/\s+/g, '-')));
+  
+  const testedInvalidShapes = new Set();
+  const testedValidShapes = new Set();
+  
+  const nonQueryableSchools = [];
   let foundNew = false;
   
-  // Limit scan to 50 pages (1000 items) to prevent hogging network/resources
-  for (let page = 0; page < 50; page++) {
+  const maxPages = totalEstimasi ? Math.ceil(totalEstimasi / limit) : 350;
+  console.log(`Menjalankan scan discovery sebanyak maksimal ${maxPages} halaman...`);
+  
+  for (let page = 0; page < maxPages; page++) {
     const url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=${limit}&offset=${offset}`;
     try {
       const res = await fetch(url);
@@ -528,25 +539,57 @@ async function runDiscoveryScan(kodeWilayah, bentukList) {
       
       for (const school of data) {
         if (!school.bentukPendidikan) continue;
-        const b = school.bentukPendidikan.toLowerCase().trim();
-        if (b && !scannedShapes.has(b)) {
-          console.log(`✨ Menemukan bentuk pendidikan baru dari API: "${b}" di sekolah "${school.nama}"`);
-          try {
-            const addRes = await fetch(`${WORKER_URL}/api/bentuk-pendidikan?secret=${CRON_SECRET}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ bentuk: b })
-            });
-            if (addRes.ok) {
-              console.log(`✅ Berhasil mendaftarkan bentuk "${b}" ke database.`);
-              scannedShapes.add(b);
-              bentukList.push(b);
-              foundNew = true;
-            } else {
-              console.error(`⚠️ Gagal mendaftarkan bentuk "${b}":`, await addRes.text());
+        const bRaw = school.bentukPendidikan;
+        const bNormalized = bRaw.toLowerCase().trim().replace(/\s+/g, '-');
+        
+        if (bNormalized && !scannedShapes.has(bNormalized)) {
+          if (testedInvalidShapes.has(bNormalized)) {
+            if (school.npsn) {
+              nonQueryableSchools.push(school);
+              if (!fullNpsnList.includes(school.npsn)) {
+                fullNpsnList.push(school.npsn);
+              }
             }
-          } catch (e) {
-            console.error(`⚠️ Error saat mendaftarkan bentuk "${b}":`, e.message);
+            continue;
+          }
+          
+          if (testedValidShapes.has(bNormalized)) {
+            continue;
+          }
+          
+          const testUrl = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=1&offset=0&bentukPendidikan=${bNormalized}`;
+          try {
+            const testRes = await fetch(testUrl);
+            const testText = await testRes.text();
+            if (testRes.status === 400 || testText.includes("invalid bentuk pendidikan")) {
+              console.log(`⚠️ Bentuk pendidikan "${bRaw}" (${bNormalized}) tidak dapat dikueri di API filter (400 Bad Request). Akan disinkronkan manual.`);
+              testedInvalidShapes.add(bNormalized);
+              
+              if (school.npsn) {
+                nonQueryableSchools.push(school);
+                if (!fullNpsnList.includes(school.npsn)) {
+                  fullNpsnList.push(school.npsn);
+                }
+              }
+            } else {
+              console.log(`✨ Menemukan bentuk pendidikan baru queryable dari API: "${bNormalized}" (${bRaw}) di sekolah "${school.nama}"`);
+              const addRes = await fetch(`${WORKER_URL}/api/bentuk-pendidikan?secret=${CRON_SECRET}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bentuk: bNormalized })
+              });
+              if (addRes.ok) {
+                console.log(`✅ Berhasil mendaftarkan bentuk "${bNormalized}" ke database.`);
+                scannedShapes.add(bNormalized);
+                bentukList.push(bNormalized);
+                testedValidShapes.add(bNormalized);
+                foundNew = true;
+              } else {
+                console.error(`⚠️ Gagal mendaftarkan bentuk "${bNormalized}":`, await addRes.text());
+              }
+            }
+          } catch (err) {
+            console.error(`Gagal menguji keabsahan bentuk "${bNormalized}":`, err.message);
           }
         }
       }
@@ -557,11 +600,26 @@ async function runDiscoveryScan(kodeWilayah, bentukList) {
     }
   }
   
+  if (nonQueryableSchools.length > 0) {
+    console.log(`Upserting ${nonQueryableSchools.length} sekolah dengan bentuk pendidikan non-queryable langsung ke database...`);
+    try {
+      await postBatchToWorker(nonQueryableSchools, 'ALL', 0, false);
+      console.log(`✅ Sukses menyinkronkan langsung sekolah non-queryable.`);
+    } catch (e) {
+      console.error(`⚠️ Gagal menyinkronkan langsung sekolah non-queryable:`, e.message);
+    }
+  }
+  
   if (foundNew) {
     console.log(`💡 Pendaftaran bentuk baru selesai. Silakan jalankan ulang sinkronisasi agar data bentuk baru ini ditarik penuh.`);
   } else {
-    console.log(`Discovery Scan selesai. Tidak ada bentuk pendidikan baru yang teridentifikasi.`);
+    console.log(`Discovery Scan selesai. Tidak ada bentuk pendidikan baru yang dapat dikueri.`);
   }
+  
+  return {
+    foundNew,
+    nonQueryableCount: nonQueryableSchools.length
+  };
 }
 
 fetchCustomData();
