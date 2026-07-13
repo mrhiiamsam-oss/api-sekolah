@@ -143,10 +143,11 @@ export default {
             const warnings = [];
             if (d.api_duplicates > 0) warnings.push(`⚠️ NPSN Ganda: ${d.api_duplicates}`);
             if (d.api_empty_npsn > 0) warnings.push(`⚠️ NPSN Kosong: ${d.api_empty_npsn}`);
+            if (d.api_unrecognized_shapes > 0) warnings.push(`⚠️ Bentuk Pendidikan Baru: ${d.api_unrecognized_shapes}`);
             
             // Fallback jika ada selisih yang belum teridentifikasi
-            if (d.raw_selisih > 0 && d.api_duplicates === 0 && d.api_empty_npsn === 0) {
-              warnings.push(`⚠️ Indikasi Data Invalid: ${d.raw_selisih}`);
+            if (d.raw_selisih > 0 && d.api_duplicates === 0 && d.api_empty_npsn === 0 && d.api_unrecognized_shapes === 0) {
+              warnings.push(`⚠️ Indikasi Data Invalid / Sinkron Terputus: ${d.raw_selisih}`);
             }
             
             const warningHtml = warnings.length > 0 ? `<div style="font-size: 11px; font-weight: 600; color: var(--danger); margin-top: 6px; line-height: 1.4;">${warnings.join('<br>')}</div>` : '';
@@ -848,16 +849,21 @@ export default {
         try {
           await env.DB.prepare(`ALTER TABLE provinsi_sync_status ADD COLUMN api_empty_npsn INTEGER DEFAULT 0`).run();
         } catch(e) {}
+        try {
+          await env.DB.prepare(`ALTER TABLE provinsi_sync_status ADD COLUMN api_unrecognized_shapes INTEGER DEFAULT 0`).run();
+        } catch(e) {}
         
-        const { results: syncStatusRes } = await env.DB.prepare('SELECT nama_provinsi, terakhir_sukses, api_duplicates, api_empty_npsn FROM provinsi_sync_status').all();
+        const { results: syncStatusRes } = await env.DB.prepare('SELECT nama_provinsi, terakhir_sukses, api_duplicates, api_empty_npsn, api_unrecognized_shapes FROM provinsi_sync_status').all();
         const syncStatusMap = {};
         const duplicatesMap = {};
         const emptyNpsnMap = {};
+        const unrecognizedShapesMap = {};
         if (syncStatusRes) {
           syncStatusRes.forEach(r => {
             syncStatusMap[cleanName(r.nama_provinsi)] = r.terakhir_sukses;
             duplicatesMap[cleanName(r.nama_provinsi)] = r.api_duplicates || 0;
             emptyNpsnMap[cleanName(r.nama_provinsi)] = r.api_empty_npsn || 0;
+            unrecognizedShapesMap[cleanName(r.nama_provinsi)] = r.api_unrecognized_shapes || 0;
           });
         }
 
@@ -902,6 +908,7 @@ export default {
             raw_selisih,
             api_duplicates: duplicateOffset,
             api_empty_npsn: emptyNpsnOffset,
+            api_unrecognized_shapes: unrecognizedShapesMap[cleanName(d.nama)] || 0,
             is_sinkron_walau_selisih
           };
         });
@@ -981,17 +988,29 @@ export default {
           const { results: dbCountRes } = await env.DB.prepare(`SELECT COUNT(*) as total_db FROM sekolah WHERE nama_provinsi = ?`).bind(searchProv).all();
           const finalDbCount = dbCountRes[0]?.total_db || 0;
           
-          let api_duplicates = (customParams.totalEstimasi || 0) - finalDbCount - totalTanpaNpsn;
+          let api_duplicates = (customParams.totalEstimasi || 0) - finalDbCount - totalTanpaNpsn - (customParams.unrecognized_shapes || 0);
           if (api_duplicates < 0) api_duplicates = 0;
 
+          let extraColumns = '';
+          let extraValues = '';
+          let extraUpdates = '';
+          let extraParams = [];
+          if (customParams.unrecognized_shapes !== undefined) {
+            extraColumns = ', api_unrecognized_shapes';
+            extraValues = ', ?';
+            extraUpdates = ', api_unrecognized_shapes = excluded.api_unrecognized_shapes';
+            extraParams.push(customParams.unrecognized_shapes);
+          }
+
           await env.DB.prepare(`
-            INSERT INTO provinsi_sync_status (nama_provinsi, terakhir_sukses, api_duplicates, api_empty_npsn)
-            VALUES (?, datetime('now', '+7 hours'), ?, ?)
+            INSERT INTO provinsi_sync_status (nama_provinsi, terakhir_sukses, api_duplicates, api_empty_npsn${extraColumns})
+            VALUES (?, datetime('now', '+7 hours'), ?, ?${extraValues})
             ON CONFLICT(nama_provinsi) DO UPDATE SET 
               terakhir_sukses = excluded.terakhir_sukses,
               api_duplicates = excluded.api_duplicates,
               api_empty_npsn = excluded.api_empty_npsn
-          `).bind(body.namaProvinsi, api_duplicates, totalTanpaNpsn).run();
+              ${extraUpdates}
+          `).bind(body.namaProvinsi, api_duplicates, totalTanpaNpsn, ...extraParams).run();
         }
 
         if (isFinished) {
