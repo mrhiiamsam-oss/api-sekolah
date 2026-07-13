@@ -355,6 +355,8 @@ async function fetchCustomData() {
   let activeNpsnsByProv = {};
   let totalPulledByProv = {};
 
+  let currentBentukEstimasi = 0;
+
   while (taskIndex < tasks.length) {
     if (Date.now() - startTime > LAMA_MAKSIMAL) {
       console.log(`⏱️ Waktu eksekusi mendekati maksimal (${LAMA_MAKSIMAL / 1000 / 60} menit). Berhenti sejenak untuk dilanjutkan pada run berikutnya...`);
@@ -388,6 +390,10 @@ async function fetchCustomData() {
       }
     }
 
+    if (offset === 0) {
+      currentBentukEstimasi = 0;
+    }
+
     const bentukAktif = currentTask.bentuk;
     let url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=${limit}&offset=${offset}`;
     if (bentukAktif !== 'ALL') {
@@ -400,9 +406,13 @@ async function fetchCustomData() {
       const result = await response.json();
       const dataList = result.data || [];
 
+      if (result.meta && result.meta.total !== undefined) {
+        currentBentukEstimasi = result.meta.total;
+      }
+
       if (dataList.length === 0) {
-        if (currentTotalEstimasi > 0 && offset < currentTotalEstimasi) {
-          console.log(`⚠️ Peringatan: API mengembalikan 0 data di offset ${offset} (belum mencapai estimasi ${currentTotalEstimasi}). Melompat ke halaman berikutnya...`);
+        if (currentBentukEstimasi > 0 && offset < currentBentukEstimasi) {
+          console.log(`⚠️ Peringatan: API mengembalikan 0 data di offset ${offset} (belum mencapai estimasi ${currentBentukEstimasi}). Melompat ke halaman berikutnya...`);
           offset += limit;
           continue;
         }
