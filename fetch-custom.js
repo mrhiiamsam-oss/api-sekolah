@@ -394,9 +394,19 @@ async function fetchCustomData() {
     let duplicates = [];
     if (provinceStartedCleanly[kodeWilayah]) {
       const schools = allSchoolsByProv[kodeWilayah] || [];
-      const npsnMap = new Map();
+      
+      // Deduplikasi entitas sekolah yang sama persis (karena overlap penarikan data normal vs Discovery Scan)
+      const uniqueSchoolsMap = new Map();
       for (const school of schools) {
         if (!school.npsn) continue;
+        const schoolKey = `${school.npsn}_${(school.nama || '').trim().toUpperCase()}_${(school.bentukPendidikan || '').trim().toUpperCase()}`;
+        if (!uniqueSchoolsMap.has(schoolKey)) {
+          uniqueSchoolsMap.set(schoolKey, school);
+        }
+      }
+
+      const npsnMap = new Map();
+      for (const school of uniqueSchoolsMap.values()) {
         if (!npsnMap.has(school.npsn)) {
           npsnMap.set(school.npsn, []);
         }
@@ -611,6 +621,9 @@ async function runDiscoveryScan(kodeWilayah, bentukList, totalEstimasi, fullNpsn
   console.log(`Menjalankan scan discovery sebanyak maksimal ${maxPages} halaman dengan concurrency limit ${concurrencyLimit}...`);
   
   const abortController = new AbortController();
+  try {
+    require('events').setMaxListeners(10000, abortController.signal);
+  } catch (e) {}
   let foundUnrecognizedCount = 0;
   
   const offsets = [];
