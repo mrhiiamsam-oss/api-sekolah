@@ -379,8 +379,8 @@ async function fetchCustomData() {
       if (unrecognized_shapes > 0) {
         console.log(`⚠️ Terdeteksi ${unrecognized_shapes} sekolah dari bentuk pendidikan yang belum terdaftar! Menjalankan Discovery Scan...`);
         const scanRes = await runDiscoveryScan(kodeWilayah, bentukList, currentTotalEstimasi, fullNpsnList, unrecognized_shapes);
-        if (scanRes && scanRes.allScannedSchools) {
-          allSchoolsByProv[kodeWilayah].push(...scanRes.allScannedSchools);
+        if (scanRes && scanRes.nonQueryableSchools) {
+          allSchoolsByProv[kodeWilayah].push(...scanRes.nonQueryableSchools);
         }
         if (scanRes && scanRes.nonQueryableCount > 0) {
           unrecognized_shapes -= scanRes.nonQueryableCount;
@@ -395,18 +395,9 @@ async function fetchCustomData() {
     if (provinceStartedCleanly[kodeWilayah]) {
       const schools = allSchoolsByProv[kodeWilayah] || [];
       
-      // Deduplikasi entitas sekolah yang sama persis (karena overlap penarikan data normal vs Discovery Scan)
-      const uniqueSchoolsMap = new Map();
+      const npsnMap = new Map();
       for (const school of schools) {
         if (!school.npsn) continue;
-        const schoolKey = `${school.npsn}_${(school.nama || '').trim().toUpperCase()}_${(school.bentukPendidikan || '').trim().toUpperCase()}`;
-        if (!uniqueSchoolsMap.has(schoolKey)) {
-          uniqueSchoolsMap.set(schoolKey, school);
-        }
-      }
-
-      const npsnMap = new Map();
-      for (const school of uniqueSchoolsMap.values()) {
         if (!npsnMap.has(school.npsn)) {
           npsnMap.set(school.npsn, []);
         }
@@ -753,6 +744,7 @@ async function runDiscoveryScan(kodeWilayah, bentukList, totalEstimasi, fullNpsn
   return {
     foundNew,
     nonQueryableCount: nonQueryableSchools.length,
+    nonQueryableSchools,
     allScannedSchools
   };
 }
