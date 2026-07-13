@@ -635,6 +635,10 @@ export default {
           if(doc) {
             // Update specific elements to prevent full DOM recreation and scroll interruption
             
+             const loaderIcon = document.getElementById('loader-icon');
+             const newLoaderIcon = doc.getElementById('loader-icon');
+             if (loaderIcon && newLoaderIcon) { loaderIcon.style.display = newLoaderIcon.style.display; }
+
             const statusBadge = document.getElementById('status');
             const newStatusBadge = doc.getElementById('status');
             if (statusBadge && newStatusBadge) { statusBadge.className = newStatusBadge.className; statusBadge.innerHTML = newStatusBadge.innerHTML; }
