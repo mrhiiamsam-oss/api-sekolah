@@ -57,8 +57,8 @@ export default {
         const bentukBerikutnya = activeRow.bentuk_aktif || 'tk';
         const offsetBerikutnya = activeRow.offset_terakhir || 0;
 
-        const totalEstimasi = activeRow.total_estimasi || (isCustom ? 12654 : 553456);
         const totalSynced = (activeRow.total_baru || 0) + (activeRow.total_diperbarui || 0) + (activeRow.total_tidak_berubah || 0);
+        const totalEstimasi = activeRow.total_estimasi || totalSynced || (isCustom ? 12654 : 553456);
 
         const currentIndex = VALID_BENTUK.indexOf(bentukBerikutnya);
         let progressPercent = 0;
@@ -1131,9 +1131,9 @@ export default {
             // Update status_sinkronisasi untuk id = 2 (Custom Sync)
             await env.DB.prepare(`
               UPDATE status_sinkronisasi 
-              SET total_dihapus = total_dihapus + ?, bentuk_aktif = 'Selesai', waktu_selesai_terakhir = datetime('now'), updated_at = datetime('now', '+7 hours')
+              SET total_dihapus = total_dihapus + ?, bentuk_aktif = 'Selesai', total_estimasi = ?, waktu_selesai_terakhir = datetime('now'), updated_at = datetime('now', '+7 hours')
               WHERE id = 2
-            `).bind(stats.dihapus).run();
+            `).bind(stats.dihapus, customParams.totalEstimasi || 0).run();
           } else {
             await env.DB.prepare(`
               UPDATE status_sinkronisasi 
