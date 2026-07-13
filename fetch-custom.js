@@ -361,6 +361,56 @@ async function fetchCustomData() {
 
   let currentBentukEstimasi = 0;
 
+  async function performProvinceCleanup(kodeWilayah, namaWilayah) {
+    console.log(`✨ Selesai sinkronisasi seluruh bentuk untuk provinsi ${kodeWilayah} (${namaWilayah}). Melakukan pembersihan...`);
+    const provNameDB = kodeWilayah === "360" ? "SEMUA" : PROVINCES[kodeWilayah];
+    
+    let fullNpsnList = [];
+    let unrecognized_shapes = 0;
+    if (provinceStartedCleanly[kodeWilayah]) {
+      fullNpsnList = activeNpsnsByProv[kodeWilayah] || [];
+      unrecognized_shapes = currentTotalEstimasi - (totalPulledByProv[kodeWilayah] || 0);
+      if (unrecognized_shapes < 0) unrecognized_shapes = 0;
+      console.log(`Mengirim ${fullNpsnList.length} NPSN aktif ke Worker untuk deteksi penghapusan data... (Indikasi Bentuk Baru: ${unrecognized_shapes})`);
+      if (unrecognized_shapes > 0) {
+        console.log(`⚠️ Terdeteksi ${unrecognized_shapes} sekolah dari bentuk pendidikan yang belum terdaftar! Menjalankan Discovery Scan...`);
+        const scanRes = await runDiscoveryScan(kodeWilayah, bentukList, currentTotalEstimasi, fullNpsnList);
+        if (scanRes && scanRes.nonQueryableCount > 0) {
+          unrecognized_shapes -= scanRes.nonQueryableCount;
+          if (unrecognized_shapes < 0) unrecognized_shapes = 0;
+        }
+      }
+    } else {
+      console.log(`Pembersihan dilewati karena provinsi disinkronisasi sebagian pada sesi ini.`);
+    }
+
+    try {
+      const { stats } = await postBatchToWorker([], 'tk', 0, true, {
+        bentukList,
+        namaProvinsi: provNameDB,
+        waktuMulai: waktuMulai,
+        activeNpsnList: fullNpsnList,
+        unrecognized_shapes: unrecognized_shapes,
+        totalEstimasi: currentTotalEstimasi
+      });
+      console.log(`🧹 Berhasil membersihkan data lama untuk ${provNameDB}. ${stats?.dihapus || 0} sekolah dihapus dan aktivitas dicatat.`);
+      
+      console.log(`🔄 Memperbarui cache Perbandingan Data (Belajar.id vs DB) untuk ${provNameDB}...`);
+      try {
+        const cmpRes = await fetch(`${WORKER_URL}/api/compare?cron=true&_t=${Date.now()}`);
+        if (cmpRes.ok) {
+          console.log(`✅ Berhasil memperbarui cache Perbandingan Data.`);
+        } else {
+          console.log(`⚠️ Gagal memperbarui cache Perbandingan Data: ${cmpRes.statusText}`);
+        }
+      } catch (e) {
+        console.log(`⚠️ Gagal memperbarui cache Perbandingan Data: ${e.message}`);
+      }
+    } catch (e) {
+      console.error(`Gagal membersihkan data lama untuk ${provNameDB}:`, e);
+    }
+  }
+
   while (taskIndex < tasks.length) {
     if (Date.now() - startTime > LAMA_MAKSIMAL) {
       console.log(`⏱️ Waktu eksekusi mendekati maksimal (${LAMA_MAKSIMAL / 1000 / 60} menit). Berhenti sejenak untuk dilanjutkan pada run berikutnya...`);
@@ -435,6 +485,11 @@ async function fetchCustomData() {
         offset = 0;
         taskIndex++;
         console.log(`➡️ Mengabaikan bentuk tidak valid [${bentukAktif.toUpperCase()}]. Pindah ke antrean berikutnya.`);
+        
+        const isProvinceFinished = taskIndex >= tasks.length || tasks[taskIndex].prov !== kodeWilayah;
+        if (isProvinceFinished) {
+          await performProvinceCleanup(kodeWilayah, namaWilayah);
+        }
         continue;
       }
 
@@ -457,54 +512,8 @@ async function fetchCustomData() {
         console.log(`➡️ Selesai untuk tipe sekolah [${bentukAktif.toUpperCase()}] wilayah ${kodeWilayah} (${namaWilayah}). Pindah ke antrean berikutnya.`);
         
         const isProvinceFinished = taskIndex >= tasks.length || tasks[taskIndex].prov !== kodeWilayah;
-         if (isProvinceFinished) {
-          console.log(`✨ Selesai sinkronisasi seluruh bentuk untuk provinsi ${kodeWilayah} (${namaWilayah}). Melakukan pembersihan...`);
-          const provNameDB = kodeWilayah === "360" ? "SEMUA" : PROVINCES[kodeWilayah];
-          
-          let fullNpsnList = [];
-          let unrecognized_shapes = 0;
-          if (provinceStartedCleanly[kodeWilayah]) {
-            fullNpsnList = activeNpsnsByProv[kodeWilayah] || [];
-            unrecognized_shapes = currentTotalEstimasi - (totalPulledByProv[kodeWilayah] || 0);
-            if (unrecognized_shapes < 0) unrecognized_shapes = 0;
-            console.log(`Mengirim ${fullNpsnList.length} NPSN aktif ke Worker untuk deteksi penghapusan data... (Indikasi Bentuk Baru: ${unrecognized_shapes})`);
-            if (unrecognized_shapes > 0) {
-              console.log(`⚠️ Terdeteksi ${unrecognized_shapes} sekolah dari bentuk pendidikan yang belum terdaftar! Menjalankan Discovery Scan...`);
-              const scanRes = await runDiscoveryScan(kodeWilayah, bentukList, currentTotalEstimasi, fullNpsnList);
-              if (scanRes && scanRes.nonQueryableCount > 0) {
-                unrecognized_shapes -= scanRes.nonQueryableCount;
-                if (unrecognized_shapes < 0) unrecognized_shapes = 0;
-              }
-            }
-          } else {
-            console.log(`Pembersihan dilewati karena provinsi disinkronisasi sebagian pada sesi ini.`);
-          }
-
-          try {
-            const { stats } = await postBatchToWorker([], 'tk', 0, true, {
-              bentukList,
-              namaProvinsi: provNameDB,
-              waktuMulai: waktuMulai,
-              activeNpsnList: fullNpsnList,
-              unrecognized_shapes: unrecognized_shapes,
-              totalEstimasi: currentTotalEstimasi
-            });
-            console.log(`🧹 Berhasil membersihkan data lama untuk ${provNameDB}. ${stats?.dihapus || 0} sekolah dihapus dan aktivitas dicatat.`);
-            
-            console.log(`🔄 Memperbarui cache Perbandingan Data (Belajar.id vs DB) untuk ${provNameDB}...`);
-            try {
-              const cmpRes = await fetch(`${WORKER_URL}/api/compare?cron=true&_t=${Date.now()}`);
-              if (cmpRes.ok) {
-                console.log(`✅ Berhasil memperbarui cache Perbandingan Data.`);
-              } else {
-                console.log(`⚠️ Gagal memperbarui cache Perbandingan Data: ${cmpRes.statusText}`);
-              }
-            } catch (e) {
-              console.log(`⚠️ Gagal memperbarui cache Perbandingan Data: ${e.message}`);
-            }
-          } catch (e) {
-            console.error(`Gagal membersihkan data lama untuk ${provNameDB}:`, e);
-          }
+        if (isProvinceFinished) {
+          await performProvinceCleanup(kodeWilayah, namaWilayah);
         }
         continue;
       }
