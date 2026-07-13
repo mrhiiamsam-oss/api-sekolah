@@ -358,6 +358,7 @@ async function fetchCustomData() {
   let provinceStartedCleanly = {};
   let activeNpsnsByProv = {};
   let totalPulledByProv = {};
+  let allSchoolsByProv = {};
 
   let currentBentukEstimasi = 0;
 
@@ -375,6 +376,9 @@ async function fetchCustomData() {
       if (unrecognized_shapes > 0) {
         console.log(`⚠️ Terdeteksi ${unrecognized_shapes} sekolah dari bentuk pendidikan yang belum terdaftar! Menjalankan Discovery Scan...`);
         const scanRes = await runDiscoveryScan(kodeWilayah, bentukList, currentTotalEstimasi, fullNpsnList, unrecognized_shapes);
+        if (scanRes && scanRes.allScannedSchools) {
+          allSchoolsByProv[kodeWilayah].push(...scanRes.allScannedSchools);
+        }
         if (scanRes && scanRes.nonQueryableCount > 0) {
           unrecognized_shapes -= scanRes.nonQueryableCount;
           if (unrecognized_shapes < 0) unrecognized_shapes = 0;
@@ -384,6 +388,36 @@ async function fetchCustomData() {
       console.log(`Pembersihan dilewati karena provinsi disinkronisasi sebagian pada sesi ini.`);
     }
 
+    let duplicates = [];
+    if (provinceStartedCleanly[kodeWilayah]) {
+      const schools = allSchoolsByProv[kodeWilayah] || [];
+      const npsnMap = new Map();
+      for (const school of schools) {
+        if (!school.npsn) continue;
+        if (!npsnMap.has(school.npsn)) {
+          npsnMap.set(school.npsn, []);
+        }
+        npsnMap.get(school.npsn).push(school);
+      }
+      
+      for (const [npsn, schoolList] of npsnMap.entries()) {
+        if (schoolList.length > 1) {
+          duplicates.push({
+            npsn,
+            sekolahList: schoolList.map(s => ({
+              nama: s.nama || '',
+              bentuk: s.bentukPendidikan || '',
+              status: s.statusSatuanPendidikan || '',
+              kecamatan: s.namaKecamatan || '',
+              kabupaten: s.namaKabupaten || '',
+              alamat: s.alamatJalan || ''
+            }))
+          });
+        }
+      }
+      console.log(`📊 Terdeteksi ${duplicates.length} NPSN ganda di data API Provinsi ${provNameDB}.`);
+    }
+
     try {
       const { stats } = await postBatchToWorker([], 'tk', 0, true, {
         bentukList,
@@ -391,7 +425,8 @@ async function fetchCustomData() {
         waktuMulai: waktuMulai,
         activeNpsnList: fullNpsnList,
         unrecognized_shapes: unrecognized_shapes,
-        totalEstimasi: currentTotalEstimasi
+        totalEstimasi: currentTotalEstimasi,
+        duplicates
       });
       console.log(`🧹 Berhasil membersihkan data lama untuk ${provNameDB}. ${stats?.dihapus || 0} sekolah dihapus dan aktivitas dicatat.`);
       
@@ -430,6 +465,7 @@ async function fetchCustomData() {
       
       provinceStartedCleanly[kodeWilayah] = isVeryBeginningOfProvince;
       activeNpsnsByProv[kodeWilayah] = [];
+      allSchoolsByProv[kodeWilayah] = [];
       totalPulledByProv[kodeWilayah] = 0;
       
       try {
@@ -525,6 +561,7 @@ async function fetchCustomData() {
       
       if (dataList && dataList.length > 0 && provinceStartedCleanly[kodeWilayah]) {
          activeNpsnsByProv[kodeWilayah].push(...dataList.map(d => d.npsn).filter(Boolean));
+         allSchoolsByProv[kodeWilayah].push(...dataList);
          totalPulledByProv[kodeWilayah] += dataList.length;
       }
 
@@ -562,6 +599,7 @@ async function runDiscoveryScan(kodeWilayah, bentukList, totalEstimasi, fullNpsn
   
   const testingShapes = new Map(); // bNormalized -> Promise<boolean> (true if valid, false if invalid)
   const nonQueryableSchools = [];
+  const allScannedSchools = [];
   let foundNew = false;
   
   const maxPages = totalEstimasi ? Math.ceil(totalEstimasi / limit) : 350;
@@ -599,6 +637,7 @@ async function runDiscoveryScan(kodeWilayah, bentukList, totalEstimasi, fullNpsn
     if (data.length === 0 || abortController.signal.aborted) {
       return;
     }
+    allScannedSchools.push(...data);
     
     for (const school of data) {
       if (abortController.signal.aborted) break;
@@ -700,7 +739,8 @@ async function runDiscoveryScan(kodeWilayah, bentukList, totalEstimasi, fullNpsn
   
   return {
     foundNew,
-    nonQueryableCount: nonQueryableSchools.length
+    nonQueryableCount: nonQueryableSchools.length,
+    allScannedSchools
   };
 }
 

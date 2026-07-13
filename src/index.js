@@ -141,7 +141,7 @@ export default {
             const trClass = idx >= 5 ? 'hidden-row' : '';
 
             const warnings = [];
-            if (d.api_duplicates > 0) warnings.push(`⚠️ NPSN Ganda: ${d.api_duplicates}`);
+            if (d.api_duplicates > 0) warnings.push(`<span style="cursor: pointer; text-decoration: underline; color: var(--danger);" onclick="showDuplicateModal('${d.nama}')">⚠️ NPSN Ganda: ${d.api_duplicates}</span>`);
             if (d.api_empty_npsn > 0) warnings.push(`⚠️ NPSN Kosong: ${d.api_empty_npsn}`);
             if (d.api_unrecognized_shapes > 0) warnings.push(`⚠️ Bentuk Pendidikan Baru: ${d.api_unrecognized_shapes}`);
 
@@ -816,7 +816,68 @@ export default {
   </div>
   <script>
     // Gunakan doAutoReload() bawaan yang sudah pintar mempertahankan state tabel dan scroll
+    
+    async function showDuplicateModal(provinsi) {
+      window.isAutoReloadPaused = true; // Pause auto reload when modal is open
+      const modal = document.getElementById('duplicate-modal');
+      const title = document.getElementById('modal-title');
+      const content = document.getElementById('modal-content');
+      
+      title.innerText = 'Detail NPSN Ganda - Provinsi ' + provinsi;
+      content.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-muted);"><span class="spin-icon">🔄</span> Memuat data...</div>';
+      modal.style.display = 'block';
+      
+      try {
+        const res = await fetch('/api/duplicates-detail?provinsi=' + encodeURIComponent(provinsi) + '&_t=' + Date.now());
+        const json = await res.json();
+        if (json.success && json.data && json.data.length > 0) {
+          let html = '';
+          json.data.forEach(function(item) {
+            html += '<div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; border-left: 4px solid var(--danger);">' +
+                    '<div style="font-weight: bold; color: var(--primary); font-size: 14px; margin-bottom: 8px;">NPSN: ' + item.npsn + '</div>' +
+                    '<div style="display: flex; flex-direction: column; gap: 10px;">';
+            item.sekolahList.forEach(function(s) {
+              html += '<div style="padding-left: 8px; border-left: 2px solid var(--border); font-size: 13px;">' +
+                      '<strong style="color: var(--text);">' + s.nama + '</strong> <span style="background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 4px; font-size: 11px; text-transform: uppercase;">' + s.bentuk + '</span>' +
+                      '<div style="color: var(--text-muted); margin-top: 4px;">Status: ' + s.status + ' | Kecamatan: ' + s.kecamatan + ' | Kabupaten: ' + s.kabupaten + '</div>' +
+                      '<div style="color: var(--text-muted); font-size: 12px; margin-top: 2px;">Alamat: ' + (s.alamat || '-') + '</div>' +
+                      '</div>';
+            });
+            html += '</div></div>';
+          });
+          content.innerHTML = html;
+        } else {
+          content.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-muted);">Tidak ada detail data NPSN ganda yang disimpan untuk provinsi ini. Jalankan sync ulang untuk memperbarui detail.</div>';
+        }
+      } catch (e) {
+        content.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--danger);">Gagal memuat detail data: ' + e.message + '</div>';
+      }
+    }
+    
+    function closeDuplicateModal() {
+      document.getElementById('duplicate-modal').style.display = 'none';
+      window.isAutoReloadPaused = false; // Resume auto reload
+    }
+    
+    // Close modal when clicking outside
+    window.addEventListener('click', function(event) {
+      const modal = document.getElementById('duplicate-modal');
+      if (event.target === modal) {
+        closeDuplicateModal();
+      }
+    });
   </script>
+  
+  <!-- Modal Detail NPSN Ganda -->
+  <div id="duplicate-modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); backdrop-filter: blur(4px);">
+    <div style="background-color: #ffffff; margin: 10% auto; padding: 24px; border: 1px solid var(--border); width: 90%; max-width: 600px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); text-align: left; position: relative;">
+      <span style="position: absolute; right: 20px; top: 15px; font-size: 24px; font-weight: bold; cursor: pointer; color: var(--text-muted);" onclick="closeDuplicateModal()">&times;</span>
+      <h3 style="margin-top: 0; font-size: 16px; font-weight: 700; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 10px;" id="modal-title">Detail NPSN Ganda</h3>
+      <div id="modal-content" style="max-height: 400px; overflow-y: auto; margin-top: 15px;">
+        <!-- Content will be populated by JS -->
+      </div>
+    </div>
+  </div>
 </body>
 </html>`;
         return new Response(html, {
@@ -1067,6 +1128,29 @@ export default {
               api_empty_npsn = excluded.api_empty_npsn
               ${extraUpdates}
           `).bind(body.namaProvinsi, api_duplicates, totalTanpaNpsn, ...extraParams).run();
+
+          // Simpan detail NPSN ganda jika ada
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS npsn_ganda_detail (
+              npsn TEXT,
+              nama_provinsi TEXT,
+              sekolah_detail TEXT,
+              PRIMARY KEY (npsn, nama_provinsi)
+            )
+          `).run();
+
+          await env.DB.prepare(`
+            DELETE FROM npsn_ganda_detail WHERE nama_provinsi = ?
+          `).bind(body.namaProvinsi).run();
+
+          if (customParams.duplicates && customParams.duplicates.length > 0) {
+            const stmt = env.DB.prepare(`
+              INSERT OR REPLACE INTO npsn_ganda_detail (npsn, nama_provinsi, sekolah_detail)
+              VALUES (?, ?, ?)
+            `);
+            const batch = customParams.duplicates.map(d => stmt.bind(d.npsn, body.namaProvinsi, JSON.stringify(d.sekolahList)));
+            await env.DB.batch(batch);
+          }
         }
 
         if (isFinished) {
@@ -1257,6 +1341,46 @@ export default {
           { ok: false, error: err.message },
           { status: 500, headers: { 'content-type': 'application/json' } }
         );
+      }
+    }
+
+    // Endpoint Detail NPSN Ganda (API)
+    if (url.pathname === '/api/duplicates-detail' && request.method === 'GET') {
+      try {
+        const provinsi = url.searchParams.get('provinsi');
+        if (!provinsi) {
+          return new Response(JSON.stringify({ success: false, error: 'Provinsi parameter is required' }), { status: 400, headers: { 'content-type': 'application/json' } });
+        }
+        
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS npsn_ganda_detail (
+            npsn TEXT,
+            nama_provinsi TEXT,
+            sekolah_detail TEXT,
+            PRIMARY KEY (npsn, nama_provinsi)
+          )
+        `).run();
+
+        const { results } = await env.DB.prepare(`
+          SELECT npsn, sekolah_detail FROM npsn_ganda_detail WHERE nama_provinsi = ?
+        `).bind(provinsi).all();
+
+        const data = (results || []).map(r => ({
+          npsn: r.npsn,
+          sekolahList: JSON.parse(r.sekolah_detail)
+        }));
+
+        return new Response(JSON.stringify({ success: true, data }), {
+          headers: { 
+            'content-type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+          }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ success: false, error: err.message }), { 
+          status: 500, 
+          headers: { 'content-type': 'application/json' } 
+        });
       }
     }
 
