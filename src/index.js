@@ -321,12 +321,13 @@ export default {
                   <th style="padding: 12px; text-align: left;">#</th>
                   <th style="padding: 12px; text-align: left;">Provinsi</th>
                   <th style="padding: 12px; text-align: center;">Estimasi Data</th>
+                  <th style="padding: 12px; text-align: center;">Selisih</th>
                   <th style="padding: 12px; text-align: center;">Status Eksekusi</th>
                 </tr>
               </thead>
               <tbody>
                 ${diffData.length === 0 ? `
-                  <tr><td colspan="4" style="padding: 24px; text-align: center; color: var(--success); font-weight: 600;">✅ Semua provinsi sudah sinkron sepenuhnya!</td></tr>
+                  <tr><td colspan="5" style="padding: 24px; text-align: center; color: var(--success); font-weight: 600;">✅ Semua provinsi sudah sinkron sepenuhnya!</td></tr>
                 ` : diffData.map((d, i) => {
           let isToday = false;
 
@@ -352,11 +353,20 @@ export default {
             rowStyle = 'border-bottom: 1px solid var(--border); background: rgba(245, 158, 11, 0.15);';
           }
 
+          let selisihColor = 'var(--danger)';
+          if (d.selisih === 0) {
+            selisihColor = 'var(--success)';
+          } else if (d.is_sinkron_walau_selisih) {
+            selisihColor = 'var(--warning)';
+          }
+          const selisihVal = `${d.selisih > 0 ? '+' : ''}${d.selisih.toLocaleString('id-ID')}`;
+
           return `
                     <tr style="${rowStyle}">
                       <td style="padding: 12px; text-align: left; font-weight: bold; color: var(--text); font-size: 14px;">${i + 1}</td>
                       <td style="padding: 12px; text-align: left; font-weight: 600; color: var(--text); font-size: 14px;">${d.nama}</td>
                       <td style="padding: 12px; text-align: center; color: var(--info); font-weight: 600; font-size: 14px;">${d.total_api.toLocaleString('id-ID')}</td>
+                      <td style="padding: 12px; text-align: center; color: ${selisihColor}; font-weight: bold; font-size: 14px;">${selisihVal}</td>
                       <td style="padding: 12px; text-align: center; font-size: 13px;">${statusLabel}</td>
                     </tr>
                   `;
