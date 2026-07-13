@@ -76,7 +76,7 @@ async function fetchDataAndInsert() {
       break;
     }
 
-    const url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/360?limit=${limit}&offset=${offset}&bentukPendidikan=${bentukAktif}`;
+    const url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/360?limit=${limit}&offset=${offset}&bentukPendidikan=${bentukAktif}&sortBy=npsn`;
 
     try {
       console.log(`Mengecek API [${bentukAktif.toUpperCase()}] offset ${offset}...`);

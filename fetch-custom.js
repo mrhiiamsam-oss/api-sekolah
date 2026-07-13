@@ -490,7 +490,7 @@ async function fetchCustomData() {
     }
 
     const bentukAktif = currentTask.bentuk;
-    let url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=${limit}&offset=${offset}`;
+    let url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=${limit}&offset=${offset}&sortBy=npsn`;
     if (bentukAktif !== 'ALL') {
       url += `&bentukPendidikan=${bentukAktif}`;
     }
@@ -624,7 +624,7 @@ async function runDiscoveryScan(kodeWilayah, bentukList, totalEstimasi, fullNpsn
   
   const fetchPage = async (offset) => {
     if (isAborted) return [];
-    const url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=${limit}&offset=${offset}`;
+    const url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=${limit}&offset=${offset}&sortBy=npsn`;
     try {
       const res = await fetch(url);
       const json = await res.json();
