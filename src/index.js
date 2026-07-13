@@ -1298,6 +1298,25 @@ export default {
       }
     }
 
+    // Endpoint untuk menghapus bentuk pendidikan
+    if (url.pathname === '/api/bentuk-pendidikan' && request.method === 'DELETE') {
+      const secret = url.searchParams.get('secret') || request.headers.get('x-cron-secret');
+      if (!env.CRON_SECRET || secret !== env.CRON_SECRET) {
+        return new Response('Unauthorized', { status: 401 });
+      }
+      try {
+        const body = await request.json();
+        const bentuk = (body.bentuk || '').toLowerCase().trim();
+        if (!bentuk) {
+          return Response.json({ ok: false, error: 'Bentuk cannot be empty' }, { status: 400 });
+        }
+        await env.DB.prepare(`DELETE FROM bentuk_pendidikan WHERE bentuk = ?`).bind(bentuk).run();
+        return Response.json({ ok: true, message: `Bentuk "${bentuk}" deleted successfully` });
+      } catch (err) {
+        return Response.json({ ok: false, error: err.message }, { status: 500 });
+      }
+    }
+
     // Endpoint check state (optional, dipanggil GH Action sebelum start)
     if (url.pathname === '/state' && request.method === 'GET') {
       const { results } = await env.DB.prepare('SELECT bentuk_aktif, offset_terakhir FROM status_sinkronisasi WHERE id = 1').all();

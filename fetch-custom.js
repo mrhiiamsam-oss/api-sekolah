@@ -407,6 +407,37 @@ async function fetchCustomData() {
     try {
       console.log(`Mengecek API [${bentukAktif.toUpperCase()}] wilayah ${kodeWilayah} (${namaWilayah}) offset ${offset}...`);
       const response = await fetch(url);
+      
+      if (response.status === 400) {
+        console.log(`⚠️ Bentuk pendidikan "${bentukAktif}" tidak valid di API kementerian (400 Bad Request).`);
+        try {
+          console.log(`Menghapus bentuk "${bentukAktif}" dari database bentuk_pendidikan...`);
+          const delRes = await fetch(`${WORKER_URL}/api/bentuk-pendidikan?secret=${CRON_SECRET}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bentuk: bentukAktif })
+          });
+          if (delRes.ok) {
+            console.log(`✅ Berhasil menghapus bentuk "${bentukAktif}" dari database.`);
+          } else {
+            console.error(`⚠️ Gagal menghapus bentuk "${bentukAktif}":`, await delRes.text());
+          }
+        } catch (e) {
+          console.error(`⚠️ Gagal menghapus bentuk "${bentukAktif}":`, e.message);
+        }
+        
+        // Hapus dari bentukList agar tidak dihitung saat pembersihan
+        const idx = bentukList.indexOf(bentukAktif);
+        if (idx > -1) {
+          bentukList.splice(idx, 1);
+        }
+        
+        offset = 0;
+        taskIndex++;
+        console.log(`➡️ Mengabaikan bentuk tidak valid [${bentukAktif.toUpperCase()}]. Pindah ke antrean berikutnya.`);
+        continue;
+      }
+
       const result = await response.json();
       const dataList = result.data || [];
 
