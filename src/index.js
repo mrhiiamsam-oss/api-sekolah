@@ -125,7 +125,7 @@ export default {
 
             let selisihColor = 'var(--danger)';
             let statusIcon = '⚠️ Berbeda';
-            
+
             if (d.selisih === 0) {
               selisihColor = 'var(--success)';
               statusIcon = '✅ Sinkron';
@@ -139,17 +139,17 @@ export default {
 
             const displayStyle = idx >= 5 ? 'display: none;' : '';
             const trClass = idx >= 5 ? 'hidden-row' : '';
-            
+
             const warnings = [];
             if (d.api_duplicates > 0) warnings.push(`⚠️ NPSN Ganda: ${d.api_duplicates}`);
             if (d.api_empty_npsn > 0) warnings.push(`⚠️ NPSN Kosong: ${d.api_empty_npsn}`);
             if (d.api_unrecognized_shapes > 0) warnings.push(`⚠️ Bentuk Pendidikan Baru: ${d.api_unrecognized_shapes}`);
-            
+
             // Fallback jika ada selisih yang belum teridentifikasi
             if (d.raw_selisih > 0 && d.api_duplicates === 0 && d.api_empty_npsn === 0 && d.api_unrecognized_shapes === 0) {
               warnings.push(`⚠️ Indikasi Data Invalid / Sinkron Terputus: ${d.raw_selisih}`);
             }
-            
+
             const warningHtml = warnings.length > 0 ? `<div style="font-size: 11px; font-weight: 600; color: var(--danger); margin-top: 6px; line-height: 1.4;">${warnings.join('<br>')}</div>` : '';
 
             return `
@@ -192,7 +192,7 @@ export default {
         const dayOfWeek = firstDayOfMonth.getDay() || 7;
         const weekOfMonth = Math.ceil((currentDate.getDate() + dayOfWeek - 1) / 7);
         const isMandatoryUpdateWeek = (weekOfMonth === 2 || weekOfMonth === 4);
-        
+
         const SCHEDULE = {
           1: ["JAWA BARAT", "GORONTALO", "SULAWESI BARAT"],
           2: ["JAWA TIMUR", "KEPULAUAN BANGKA BELITUNG", "KALIMANTAN UTARA"],
@@ -211,7 +211,7 @@ export default {
         const diffData = compareCache && compareCache.value ? compareCache.value.filter(d => {
           const lastSuksesMs = provSyncMap[d.nama];
           d.isSyncedToday = lastSuksesMs && new Date(lastSuksesMs).toISOString().split('T')[0] === todayDateWIB;
-          
+
           if (isMandatoryUpdateWeek) {
             return todaySchedule.includes(d.nama) || tomorrowSchedule.includes(d.nama);
           } else {
@@ -220,36 +220,36 @@ export default {
             return true;
           }
         }) : [];
-        
+
         if (isMandatoryUpdateWeek) {
-           diffData.sort((a, b) => {
-             const aIsToday = todaySchedule.includes(a.nama);
-             const bIsToday = todaySchedule.includes(b.nama);
-             if (aIsToday && !bIsToday) return -1;
-             if (!aIsToday && bIsToday) return 1;
-             if (aIsToday && bIsToday) return todaySchedule.indexOf(a.nama) - todaySchedule.indexOf(b.nama);
-             return tomorrowSchedule.indexOf(a.nama) - tomorrowSchedule.indexOf(b.nama);
-           });
+          diffData.sort((a, b) => {
+            const aIsToday = todaySchedule.includes(a.nama);
+            const bIsToday = todaySchedule.includes(b.nama);
+            if (aIsToday && !bIsToday) return -1;
+            if (!aIsToday && bIsToday) return 1;
+            if (aIsToday && bIsToday) return todaySchedule.indexOf(a.nama) - todaySchedule.indexOf(b.nama);
+            return tomorrowSchedule.indexOf(a.nama) - tomorrowSchedule.indexOf(b.nama);
+          });
         } else {
           diffData.sort((a, b) => {
             const aHasSynced = a.terakhir_sukses ? 1 : 0;
             const bHasSynced = b.terakhir_sukses ? 1 : 0;
-            
+
             if (aHasSynced !== bHasSynced) {
               return aHasSynced - bHasSynced; // 0 (belum sinkron) duluan
             }
 
             const aIsDifferent = (Math.abs(a.selisih) > 0 && !a.is_sinkron_walau_selisih) ? 1 : 0;
             const bIsDifferent = (Math.abs(b.selisih) > 0 && !b.is_sinkron_walau_selisih) ? 1 : 0;
-            
+
             if (aIsDifferent !== bIsDifferent) {
-               return bIsDifferent - aIsDifferent; // 1 (berbeda) duluan
+              return bIsDifferent - aIsDifferent; // 1 (berbeda) duluan
             }
-            
+
             if (aHasSynced && bHasSynced) {
-               const timeA = new Date(a.terakhir_sukses).getTime();
-               const timeB = new Date(b.terakhir_sukses).getTime();
-               if (timeA !== timeB) return timeA - timeB; // Terlama duluan agar bergiliran
+              const timeA = new Date(a.terakhir_sukses).getTime();
+              const timeB = new Date(b.terakhir_sukses).getTime();
+              if (timeA !== timeB) return timeA - timeB; // Terlama duluan agar bergiliran
             }
 
             const maxDiffA = Math.abs(a.selisih);
@@ -263,31 +263,31 @@ export default {
         try {
           const { results: syncedTodayRes } = await env.DB.prepare("SELECT SUM(total_baru + total_diperbarui + total_tidak_berubah) as total FROM log_aktivitas_provinsi WHERE DATE(waktu_selesai) = DATE('now', '+7 hours')").all();
           syncedToday = syncedTodayRes[0]?.total || 0;
-        } catch(e) {}
-        
+        } catch (e) { }
+
         if (isCustom && activeRow.updated_at) {
-           const updatedAt = new Date(activeRow.updated_at.replace(' ', 'T') + '+07:00').getTime();
-           if (Date.now() - updatedAt < 5 * 60000) {
-              const currentRunning = (activeRow.total_baru || 0) + (activeRow.total_diperbarui || 0) + (activeRow.total_tidak_berubah || 0);
-              syncedToday += currentRunning;
-           }
+          const updatedAt = new Date(activeRow.updated_at.replace(' ', 'T') + '+07:00').getTime();
+          if (Date.now() - updatedAt < 5 * 60000) {
+            const currentRunning = (activeRow.total_baru || 0) + (activeRow.total_diperbarui || 0) + (activeRow.total_tidak_berubah || 0);
+            syncedToday += currentRunning;
+          }
         }
         const SISA_KUOTA = Math.max(0, BATAS_AMAN - syncedToday);
         let runningTotalEstimasi = 0;
-        
+
         let activeProvince = null;
         let isActive = false;
         if (row2 && row2.updated_at) {
-           const updatedAt = new Date(row2.updated_at.replace(' ', 'T') + '+07:00').getTime();
-           if (Date.now() - updatedAt < 5 * 60000) {
-             isActive = true;
-             if (row2.bentuk_aktif) {
-               const match = row2.bentuk_aktif.match(/\((.*?)\)/);
-               if (match) activeProvince = match[1];
-             }
-           }
+          const updatedAt = new Date(row2.updated_at.replace(' ', 'T') + '+07:00').getTime();
+          if (Date.now() - updatedAt < 5 * 60000) {
+            isActive = true;
+            if (row2.bentuk_aktif) {
+              const match = row2.bentuk_aktif.match(/\((.*?)\)/);
+              if (match) activeProvince = match[1];
+            }
+          }
         }
-        
+
         let bannerHtml = '';
         if (isMandatoryUpdateWeek) {
           bannerHtml = `
@@ -328,31 +328,31 @@ export default {
                 ${diffData.length === 0 ? `
                   <tr><td colspan="4" style="padding: 24px; text-align: center; color: var(--success); font-weight: 600;">✅ Semua provinsi sudah sinkron sepenuhnya!</td></tr>
                 ` : diffData.map((d, i) => {
-                  let isToday = false;
-                  
-                  if (!d.isSyncedToday) {
-                    const isFirstUnsynced = !diffData.slice(0, i).some(prev => !prev.isSyncedToday);
-                    if (runningTotalEstimasi + d.total_api <= SISA_KUOTA) {
-                      isToday = true;
-                      runningTotalEstimasi += d.total_api;
-                    } else if (isFirstUnsynced && SISA_KUOTA > 0) {
-                      isToday = true;
-                      runningTotalEstimasi += d.total_api;
-                    }
-                  }
-                  
-                  const isSynced = Math.abs(d.selisih) === 0 || d.is_sinkron_walau_selisih;
-                  let statusLabel = isToday ? '<span style="color: var(--warning); font-weight: 600;">⏳ Dieksekusi Hari Ini</span>' : '<span style="color: var(--text-muted);">Antre Besok</span>';
-                  
-                  let rowStyle = 'border-bottom: 1px solid var(--border);';
-                  if (d.isSyncedToday) {
-                     statusLabel = '<span style="color: var(--success); font-weight: 600;">✅ Selesai Hari Ini</span>';
-                  } else if (isActive && activeProvince === d.nama) {
-                     statusLabel = '<span style="color: var(--warning); font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 4px;"><span class="spin-icon">🔄</span> Proses Sinkron</span>';
-                     rowStyle = 'border-bottom: 1px solid var(--border); background: rgba(245, 158, 11, 0.15);';
-                  }
-                  
-                  return `
+          let isToday = false;
+
+          if (!d.isSyncedToday) {
+            const isFirstUnsynced = !diffData.slice(0, i).some(prev => !prev.isSyncedToday);
+            if (runningTotalEstimasi + d.total_api <= SISA_KUOTA) {
+              isToday = true;
+              runningTotalEstimasi += d.total_api;
+            } else if (isFirstUnsynced && SISA_KUOTA > 0) {
+              isToday = true;
+              runningTotalEstimasi += d.total_api;
+            }
+          }
+
+          const isSynced = Math.abs(d.selisih) === 0 || d.is_sinkron_walau_selisih;
+          let statusLabel = isToday ? '<span style="color: var(--warning); font-weight: 600;">⏳ Dieksekusi Hari Ini</span>' : '<span style="color: var(--text-muted);">Antre Besok</span>';
+
+          let rowStyle = 'border-bottom: 1px solid var(--border);';
+          if (d.isSyncedToday) {
+            statusLabel = '<span style="color: var(--success); font-weight: 600;">✅ Selesai Hari Ini</span>';
+          } else if (isActive && activeProvince === d.nama) {
+            statusLabel = '<span style="color: var(--warning); font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 4px;"><span class="spin-icon">🔄</span> Proses Sinkron</span>';
+            rowStyle = 'border-bottom: 1px solid var(--border); background: rgba(245, 158, 11, 0.15);';
+          }
+
+          return `
                     <tr style="${rowStyle}">
                       <td style="padding: 12px; text-align: left; font-weight: bold; color: var(--text); font-size: 14px;">${i + 1}</td>
                       <td style="padding: 12px; text-align: left; font-weight: 600; color: var(--text); font-size: 14px;">${d.nama}</td>
@@ -360,7 +360,7 @@ export default {
                       <td style="padding: 12px; text-align: center; font-size: 13px;">${statusLabel}</td>
                     </tr>
                   `;
-                }).join('')}
+        }).join('')}
               </tbody>
             </table>
             </div>
@@ -759,31 +759,10 @@ export default {
       Kunjungi Website Utama
     </a>
     
-    <div style="font-size: 12px; color: var(--text-muted); margin-top: 20px;">Halaman refresh setiap 5 detik otomatis (Smooth)</div>
+    <div style="font-size: 12px; color: var(--text-muted); margin-top: 20px;">Halaman refresh setiap 5 detik otomatis</div>
   </div>
   <script>
-    // Smooth auto-refresh without jumping scroll
-    function startAutoRefresh() {
-      setTimeout(async () => {
-        try {
-          const res = await fetch(window.location.href);
-          const html = await res.text();
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(html, 'text/html');
-          
-          // Ganti isi card untuk mempertahankan scroll body
-          const newCard = doc.querySelector('.card');
-          const oldCard = document.querySelector('.card');
-          if (newCard && oldCard) {
-            oldCard.innerHTML = newCard.innerHTML;
-          }
-        } catch (e) {
-          console.error('Gagal memuat ulang data dashboard:', e);
-        }
-        startAutoRefresh(); // loop
-      }, 5000);
-    }
-    startAutoRefresh();
+    // Gunakan doAutoReload() bawaan yang sudah pintar mempertahankan state tabel dan scroll
   </script>
 </body>
 </html>`;
@@ -802,12 +781,12 @@ export default {
 
         // Buat tabel cache_data jika belum ada
         await env.DB.prepare(`CREATE TABLE IF NOT EXISTS cache_data (key TEXT PRIMARY KEY, value TEXT, updated_at TIMESTAMPTZ)`).run();
-        
+
         let synced_today = 0;
         try {
           const { results: syncedTodayRes } = await env.DB.prepare("SELECT SUM(total_baru + total_diperbarui + total_tidak_berubah) as total FROM log_aktivitas_provinsi WHERE DATE(waktu_selesai) = DATE('now', '+7 hours')").all();
           synced_today = syncedTodayRes[0]?.total || 0;
-        } catch(e) {}
+        } catch (e) { }
 
         if (!isCron) {
           const { results } = await env.DB.prepare("SELECT value FROM cache_data WHERE key = 'perbandingan'").all();
@@ -866,17 +845,17 @@ export default {
         };
 
         await env.DB.prepare(`CREATE TABLE IF NOT EXISTS provinsi_sync_status (nama_provinsi TEXT PRIMARY KEY, terakhir_sukses TIMESTAMPTZ)`).run();
-        
+
         try {
           await env.DB.prepare(`ALTER TABLE provinsi_sync_status ADD COLUMN api_duplicates INTEGER DEFAULT 0`).run();
-        } catch(e) {}
+        } catch (e) { }
         try {
           await env.DB.prepare(`ALTER TABLE provinsi_sync_status ADD COLUMN api_empty_npsn INTEGER DEFAULT 0`).run();
-        } catch(e) {}
+        } catch (e) { }
         try {
           await env.DB.prepare(`ALTER TABLE provinsi_sync_status ADD COLUMN api_unrecognized_shapes INTEGER DEFAULT 0`).run();
-        } catch(e) {}
-        
+        } catch (e) { }
+
         const { results: syncStatusRes } = await env.DB.prepare('SELECT nama_provinsi, terakhir_sukses, api_duplicates, api_empty_npsn, api_unrecognized_shapes FROM provinsi_sync_status').all();
         const syncStatusMap = {};
         const duplicatesMap = {};
@@ -916,19 +895,19 @@ export default {
           const total_db = dbData.total_db;
           const selisih = adjustedTotalApi - total_db;
           const raw_selisih = d.total_api - total_db;
-          
+
           const is_sinkron_walau_selisih = selisih !== 0 && selisih === emptyNpsnOffset;
-          
-          return { 
-            ...d, 
+
+          return {
+            ...d,
             terakhir_sukses: syncStatusMap[cleanName(d.nama)],
-            total_db, 
-            tanpa_bentuk: dbData.tanpa_bentuk, 
-            tanpa_jenjang: dbData.tanpa_jenjang, 
+            total_db,
+            tanpa_bentuk: dbData.tanpa_bentuk,
+            tanpa_jenjang: dbData.tanpa_jenjang,
             tanpa_kabupaten: dbData.tanpa_kabupaten,
             tanpa_kecamatan: dbData.tanpa_kecamatan,
             tanpa_desa: dbData.tanpa_desa,
-            selisih, 
+            selisih,
             raw_selisih,
             api_duplicates: duplicateOffset,
             api_empty_npsn: emptyNpsnOffset,
@@ -978,7 +957,7 @@ export default {
         try {
           await env.DB.prepare(`ALTER TABLE status_sinkronisasi ADD COLUMN total_estimasi INTEGER DEFAULT 0`).run();
         } catch (e) { }
-        
+
         try {
           await env.DB.prepare(`ALTER TABLE status_sinkronisasi ADD COLUMN total_tanpa_npsn INTEGER DEFAULT 0`).run();
         } catch (e) { }
@@ -996,7 +975,7 @@ export default {
         // Simpan log terakhir provinsi sukses
         if (isFinished && body.customSync && body.namaProvinsi && body.namaProvinsi !== 'SEMUA') {
           await env.DB.prepare(`CREATE TABLE IF NOT EXISTS provinsi_sync_status (nama_provinsi TEXT PRIMARY KEY, terakhir_sukses TIMESTAMPTZ)`).run();
-          
+
           try {
             await env.DB.prepare(`ALTER TABLE provinsi_sync_status ADD COLUMN api_duplicates INTEGER DEFAULT 0`).run();
           } catch (e) { }
@@ -1007,11 +986,11 @@ export default {
           // Hitung api_duplicates: (totalEstimasi dari API) - (total_db setelah dihapus) - (total_tanpa_npsn yang di-skip)
           const { results: currentStatsRes } = await env.DB.prepare(`SELECT total_tanpa_npsn FROM status_sinkronisasi WHERE id = 2`).all();
           const totalTanpaNpsn = currentStatsRes[0]?.total_tanpa_npsn || 0;
-          
+
           const searchProv = body.namaProvinsi === 'LUAR NEGERI' ? 'LUAR NEGERI' : `PROV. ${body.namaProvinsi}`;
           const { results: dbCountRes } = await env.DB.prepare(`SELECT COUNT(*) as total_db FROM sekolah WHERE nama_provinsi = ?`).bind(searchProv).all();
           const finalDbCount = dbCountRes[0]?.total_db || 0;
-          
+
           let api_duplicates = (customParams.totalEstimasi || 0) - finalDbCount - totalTanpaNpsn - (customParams.unrecognized_shapes || 0);
           if (api_duplicates < 0) api_duplicates = 0;
 
@@ -1044,15 +1023,15 @@ export default {
             stats.dihapus = 0;
             if (body.activeNpsnList && body.activeNpsnList.length > 0) {
               const searchProv = body.namaProvinsi === 'LUAR NEGERI' ? 'LUAR NEGERI' : `PROV. ${body.namaProvinsi}`;
-              
+
               // Ambil semua NPSN yang ada di database untuk provinsi ini
               const { results: dbSchools } = await env.DB.prepare(`SELECT npsn FROM sekolah WHERE nama_provinsi = ?`).bind(searchProv).all();
-              
+
               const dbNpsnSet = new Set((dbSchools || []).map(r => r.npsn));
-              
+
               // Hapus NPSN yang masih aktif (berarti sisanya adalah sekolah yang sudah tutup/dihapus)
               body.activeNpsnList.forEach(npsn => dbNpsnSet.delete(npsn));
-              
+
               const deletedNpsns = Array.from(dbNpsnSet);
               if (deletedNpsns.length > 0) {
                 // Eksekusi penghapusan dalam chunk untuk menghindari limit parameter bind SQLite
@@ -1176,13 +1155,13 @@ export default {
         const body = await request.json();
         if (body.provinsiList && Array.isArray(body.provinsiList)) {
           await env.DB.prepare(`CREATE TABLE IF NOT EXISTS provinsi_sync_status (nama_provinsi TEXT PRIMARY KEY, terakhir_sukses TIMESTAMPTZ)`).run();
-          
+
           try {
             await env.DB.prepare(`ALTER TABLE provinsi_sync_status ADD COLUMN api_duplicates INTEGER DEFAULT 0`).run();
-          } catch(e) {}
+          } catch (e) { }
           try {
             await env.DB.prepare(`ALTER TABLE provinsi_sync_status ADD COLUMN api_empty_npsn INTEGER DEFAULT 0`).run();
-          } catch(e) {}
+          } catch (e) { }
 
           const stmt = env.DB.prepare(`
             INSERT INTO provinsi_sync_status (nama_provinsi, terakhir_sukses, api_duplicates, api_empty_npsn)
@@ -1194,10 +1173,10 @@ export default {
           `);
 
           const batch = body.provinsiList.map(p => {
-             if (typeof p === 'object' && p.nama) {
-                 return stmt.bind(p.nama, p.api_duplicates || 0, p.api_empty_npsn || 0);
-             }
-             return stmt.bind(p, 0, 0);
+            if (typeof p === 'object' && p.nama) {
+              return stmt.bind(p.nama, p.api_duplicates || 0, p.api_empty_npsn || 0);
+            }
+            return stmt.bind(p, 0, 0);
           });
           await env.DB.batch(batch);
         }
