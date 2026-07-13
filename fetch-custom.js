@@ -68,6 +68,9 @@ async function postBatchToWorker(dataList, bentukAktif, offset, isFinished, cust
     if (customSyncParams.unrecognized_shapes !== undefined) {
       payload.unrecognized_shapes = customSyncParams.unrecognized_shapes;
     }
+    if (customSyncParams.duplicates) {
+      payload.duplicates = customSyncParams.duplicates;
+    }
   }
   const res = await fetch(`${WORKER_URL}/sync-batch`, {
     method: 'POST',
