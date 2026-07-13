@@ -460,7 +460,7 @@ export default {
     .stat-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
     
     .progress-bar { height: 6px; background: var(--border); border-radius: 9999px; overflow: hidden; margin-top: 24px; }
-    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--primary), #a855f7); width: ${selesai ? 100 : progressPercent}%; transition: width 0.3s; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--primary), #a855f7); transition: width 0.3s; }
     
     .loader {
       width: 48px; height: 48px; border: 5px solid var(--primary); border-bottom-color: transparent;
@@ -577,9 +577,10 @@ export default {
         window.isAutoReloadPaused = true;
         const url = new URL(window.location.href);
         url.searchParams.set('page', page);
+        url.searchParams.set('_t', new Date().getTime());
         
         // Tetap tampilkan loading state jika perlu, tapi karena cepat, biarkan saja
-        const res = await fetch(url.toString());
+        const res = await fetch(url.toString(), { cache: 'no-store' });
         const html = await res.text();
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
@@ -619,7 +620,10 @@ export default {
       
       const isShowAll = sessionStorage.getItem("compareShowAll") === "true";
 
-      fetch(window.location.href)
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set('_t', new Date().getTime());
+
+      fetch(currentUrl.toString(), { cache: 'no-store' })
         .then(res => res.text())
         .then(html => {
           const parser = new DOMParser();
@@ -720,7 +724,7 @@ export default {
     
     <div style="max-width: 400px; margin: 0 auto 24px auto;">
       <div class="progress-bar" style="margin-top: 0;">
-        <div class="progress-fill"></div>
+        <div class="progress-fill" style="width: ${selesai ? 100 : progressPercent}%;"></div>
       </div>
       <div id="progress-stats" style="display: flex; justify-content: space-between; font-size: 13px; color: var(--text-muted); margin-top: 8px; font-weight: 500;">
         <span>${progressPercent}% Selesai</span>

@@ -406,7 +406,7 @@ async function fetchCustomData() {
             
             console.log(`🔄 Memperbarui cache Perbandingan Data (Belajar.id vs DB) untuk ${provNameDB}...`);
             try {
-              const cmpRes = await fetch(`${WORKER_URL}/api/compare?cron=true`);
+              const cmpRes = await fetch(`${WORKER_URL}/api/compare?cron=true&_t=${Date.now()}`);
               if (cmpRes.ok) {
                 console.log(`✅ Berhasil memperbarui cache Perbandingan Data.`);
               } else {
