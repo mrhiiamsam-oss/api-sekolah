@@ -374,6 +374,12 @@ async function fetchCustomData() {
       const dataList = result.data || [];
 
       if (dataList.length === 0) {
+        if (currentTotalEstimasi > 0 && offset < currentTotalEstimasi) {
+          console.log(`⚠️ Peringatan: API mengembalikan 0 data di offset ${offset} (belum mencapai estimasi ${currentTotalEstimasi}). Melompat ke halaman berikutnya...`);
+          offset += limit;
+          continue;
+        }
+        
         offset = 0;
         taskIndex++;
         console.log(`➡️ Selesai untuk tipe sekolah [${bentukAktif.toUpperCase()}] wilayah ${kodeWilayah} (${namaWilayah}). Pindah ke antrean berikutnya.`);
