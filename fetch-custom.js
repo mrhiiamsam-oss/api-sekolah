@@ -10,7 +10,7 @@ if (!CRON_SECRET) {
 }
 
 const BENTUK_GROUP = {
-  "Semua": ['tk', 'kb', 'sps', 'tpa', 'paudq', 'sd', 'smp', 'sma', 'smk', 'slb', 'skb', 'pkbm', 'kursus', 'ra', 'mi', 'mts', 'ma', 'smak', 'smptk', 'smtk', 'sdtk', 'spk-kb', 'spk-sd', 'spk-sma', 'spk-smp', 'spk-tk', 'spm-ula', 'spm-ulya', 'spm-wustha', 'taman-seminari', 'pdf-ulya', 'pdf-wustha', 'mak', 'mula-dhammasekha', 'nava-dhammasekha', 'uttama-dhammasekha', 'pondok-pesantren', 'smag-k'],
+  "Semua": ['ALL'],
   "TK Sederajat": ['tk', 'ra', 'spk-tk', 'taman-seminari'],
   "KB Sederajat": ['kb', 'spk-kb', 'paudq'],
   "TPA & SPS": ['tpa', 'sps'],
@@ -346,7 +346,10 @@ async function fetchCustomData() {
     }
 
     const bentukAktif = currentTask.bentuk;
-    const url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=${limit}&offset=${offset}&bentukPendidikan=${bentukAktif}`;
+    let url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=${limit}&offset=${offset}`;
+    if (bentukAktif !== 'ALL') {
+      url += `&bentukPendidikan=${bentukAktif}`;
+    }
 
     try {
       console.log(`Mengecek API [${bentukAktif.toUpperCase()}] wilayah ${kodeWilayah} (${namaWilayah}) offset ${offset}...`);

@@ -964,9 +964,9 @@ export default {
           stats = await syncBatch(env.DB, dataList);
         }
 
-        // Jika mulai dari awal (tk, offset 0), kita reset statistiknya
+        // Jika mulai dari awal (tk atau ALL, offset 0), kita reset statistiknya
         let resetStats = "";
-        if (bentukAktif === 'tk' && offset === 0) {
+        if ((bentukAktif === 'tk' || bentukAktif === 'ALL') && offset === 0) {
           resetStats = ", total_baru = 0, total_diperbarui = 0, total_tidak_berubah = 0, total_dihapus = 0, waktu_mulai_sinkronisasi = datetime('now', '+7 hours')";
         }
 
@@ -1016,29 +1016,6 @@ export default {
 
         if (isFinished) {
           if (body.customSync) {
-            // Gunakan LOWER(bentuk_pendidikan) karena database mungkin menyimpannya sebagai huruf besar (misal 'TK', 'SD'),
-            // sedangkan body.bentukList berisi huruf kecil (misal 'tk', 'sd').
-            const dbBentukList = body.bentukList.map(b => b === 'smag-k' ? 'smag.k' : b.replace(/-/g, ' '));
-            const placeholders = dbBentukList.map(() => '?').join(',');
-            let query = `DELETE FROM sekolah WHERE LOWER(bentuk_pendidikan) IN (${placeholders}) AND migrated_at < ?`;
-            let params = [...dbBentukList, body.waktuMulai];
-
-            if (dbBentukList.length >= 38) {
-              query = `DELETE FROM sekolah WHERE migrated_at < ?`;
-              params = [body.waktuMulai];
-            }
-
-            if (body.namaProvinsi && body.namaProvinsi !== 'SEMUA') {
-              const searchProv = body.namaProvinsi === 'LUAR NEGERI' ? 'LUAR NEGERI' : `PROV. ${body.namaProvinsi}`;
-              if (dbBentukList.length >= 38) {
-                query = `DELETE FROM sekolah WHERE nama_provinsi = ? AND migrated_at < ?`;
-                params = [searchProv, body.waktuMulai];
-              } else {
-                query = `DELETE FROM sekolah WHERE LOWER(bentuk_pendidikan) IN (${placeholders}) AND nama_provinsi = ? AND migrated_at < ?`;
-                params = [...dbBentukList, searchProv, body.waktuMulai];
-              }
-            }
-
             // Karena kita berhenti mengupdate migrated_at untuk data yang tidak berubah (demi menghemat kuota D1),
             // pembersihan otomatis dilakukan dengan mencocokkan list NPSN aktif yang dikirim oleh worker.
             stats.dihapus = 0;
