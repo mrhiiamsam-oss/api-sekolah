@@ -283,7 +283,7 @@ export default {
         let bannerHtml = '';
         if (isMandatoryUpdateDay) {
           bannerHtml = `
-            <div style="background: rgba(99, 102, 241, 0.1); border-left: 4px solid var(--primary); padding: 12px 16px; border-radius: 0 8px 8px 0; margin-bottom: 24px;">
+            <div style="background: rgba(99, 102, 241, 0.1); border-left: 4px solid var(--primary); padding: 12px 16px; border-radius: 0 8px 8px 0; margin-top: 24px; margin-bottom: 24px;">
               <strong style="color: var(--primary);">🗓️ Hari Sinkronisasi Penuh Aktif!</strong>
               <div style="font-size: 13px; margin-top: 4px; color: var(--text-muted);">
                 Setiap Rabu dan Kamis, sistem memperbarui seluruh provinsi sesuai grup tanpa mengecek perbedaan. Hari ini: <strong>${currentDayOfWeek === 3 ? 'Grup 1 (Rabu)' : 'Grup 2 (Kamis)'}</strong>.
@@ -292,7 +292,7 @@ export default {
           `;
         } else {
           bannerHtml = `
-            <div style="background: rgba(16, 185, 129, 0.1); border-left: 4px solid var(--success); padding: 12px 16px; border-radius: 0 8px 8px 0; margin-bottom: 24px;">
+            <div style="background: rgba(16, 185, 129, 0.1); border-left: 4px solid var(--success); padding: 12px 16px; border-radius: 0 8px 8px 0; margin-top: 24px; margin-bottom: 24px;">
               <strong style="color: var(--success);">🧠 Mode Smart Sync Aktif!</strong>
               <div style="font-size: 13px; margin-top: 4px; color: var(--text-muted);">
                 Di luar hari Rabu dan Kamis, sistem hanya menarik data untuk provinsi yang mendeteksi perbedaan secara cerdas.
@@ -387,10 +387,10 @@ export default {
         const totalPages = Math.ceil(totalLogs / limit) || 1;
         let paginationHtml = '';
         if (totalPages > 1) {
-          paginationHtml = `<div style="display: flex; justify-content: center; gap: 8px; margin-top: 16px;">
-            ${page > 1 ? `<a href="/?page=${page - 1}" style="padding: 6px 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 6px; color: var(--text); text-decoration: none; font-size: 13px;">&laquo; Prev</a>` : ''}
+          paginationHtml = `<div id="log-pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 16px;">
+            ${page > 1 ? `<a href="javascript:void(0)" onclick="changeLogPage(${page - 1})" style="padding: 6px 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 6px; color: var(--text); text-decoration: none; font-size: 13px;">&laquo; Prev</a>` : ''}
             <span style="padding: 6px 12px; font-size: 13px; color: var(--text-muted);">Halaman ${page} dari ${totalPages}</span>
-            ${page < totalPages ? `<a href="/?page=${page + 1}" style="padding: 6px 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 6px; color: var(--text); text-decoration: none; font-size: 13px;">Next &raquo;</a>` : ''}
+            ${page < totalPages ? `<a href="javascript:void(0)" onclick="changeLogPage(${page + 1})" style="padding: 6px 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 6px; color: var(--text); text-decoration: none; font-size: 13px;">Next &raquo;</a>` : ''}
           </div>`;
         }
 
@@ -572,6 +572,39 @@ export default {
       }
     }
 
+    async function changeLogPage(page) {
+      try {
+        window.isAutoReloadPaused = true;
+        const url = new URL(window.location.href);
+        url.searchParams.set('page', page);
+        
+        // Tetap tampilkan loading state jika perlu, tapi karena cepat, biarkan saja
+        const res = await fetch(url.toString());
+        const html = await res.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        const newLogContainer = doc.getElementById('log-container');
+        const currentLogContainer = document.getElementById('log-container');
+        if (newLogContainer && currentLogContainer) {
+          currentLogContainer.innerHTML = newLogContainer.innerHTML;
+        }
+
+        const newPagination = doc.getElementById('log-pagination');
+        const currentPaginationWrapper = document.getElementById('log-pagination-wrapper');
+        if (currentPaginationWrapper) {
+          currentPaginationWrapper.innerHTML = newPagination ? newPagination.outerHTML : '';
+        }
+        
+        // Update URL di browser tanpa me-refresh halaman
+        window.history.pushState({}, '', url.toString());
+      } catch(e) {
+        console.error("Gagal mengganti halaman log", e);
+      } finally {
+        window.isAutoReloadPaused = false;
+      }
+    }
+
     function doAutoReload() {
       if (window.isAutoReloadPaused) {
         setTimeout(doAutoReload, 5000);
@@ -728,7 +761,9 @@ export default {
       <div id="log-container" style="display: flex; flex-direction: column; gap: 8px;">
         ${logHtml}
       </div>
-      ${paginationHtml}
+      <div id="log-pagination-wrapper">
+        ${paginationHtml}
+      </div>
     </div>
 
     <div style="margin-top: 32px; text-align: left;">
