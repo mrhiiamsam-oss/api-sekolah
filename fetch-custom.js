@@ -99,6 +99,12 @@ async function fetchCustomData() {
   } else {
     const parts = argProvinsi.split(',').map(p => p.trim()).filter(p => p);
     for (const p of parts) {
+      if (p.toUpperCase() === "SEMUA" || p.toUpperCase() === "ALL") {
+        kodeWilayahList = Object.keys(PROVINCES);
+        console.log(`Provinsi dikenali: SEMUA PROVINSI`);
+        continue;
+      }
+
       const searchP = p.replace(/[^A-Z0-9]/g, '');
       // 1. Coba cari exact match dulu
       let foundCode = Object.keys(PROVINCES).find(k => {
@@ -114,7 +120,7 @@ async function fetchCustomData() {
         });
       }
       if (foundCode) {
-        kodeWilayahList.push(foundCode);
+        if (!kodeWilayahList.includes(foundCode)) kodeWilayahList.push(foundCode);
         console.log(`Provinsi dikenali: ${PROVINCES[foundCode]} (Kode: ${foundCode}) dari input '${p}'`);
       } else {
         console.log(`Peringatan: Provinsi '${p}' tidak dikenali, akan diabaikan.`);
@@ -154,7 +160,7 @@ async function fetchCustomData() {
           const isSynced = Math.abs(d.selisih) === 0 || d.is_sinkron_walau_selisih;
           if (isSynced && !isMandatoryUpdateWeek) return false;
           
-          if (d.terakhir_sukses) {
+          if (isCronSchedule && d.terakhir_sukses) {
             const todayDate = currentDate.toISOString().split('T')[0];
             const syncedDate = d.terakhir_sukses.split(' ')[0];
             if (syncedDate === todayDate) {
