@@ -1246,6 +1246,54 @@ export default {
       }
     }
 
+    // Endpoint untuk mendapatkan daftar bentuk pendidikan dinamis
+    if (url.pathname === '/api/bentuk-pendidikan' && request.method === 'GET') {
+      try {
+        await env.DB.prepare(`CREATE TABLE IF NOT EXISTS bentuk_pendidikan (bentuk TEXT PRIMARY KEY)`).run();
+        
+        // Seed if empty
+        const { results: countRes } = await env.DB.prepare(`SELECT COUNT(*) as count FROM bentuk_pendidikan`).all();
+        if (countRes && countRes[0] && countRes[0].count === 0) {
+          const defaultBentuk = [
+            'tk', 'kb', 'sps', 'tpa', 'paudq', 'sd', 'smp', 'sma', 'smk', 'slb',
+            'skb', 'pkbm', 'kursus', 'ra', 'mi', 'mts', 'ma',
+            'smak', 'smptk', 'smtk', 'sdtk', 'spk-kb', 'spk-sd', 'spk-sma', 'spk-smp', 'spk-tk',
+            'spm-ula', 'spm-ulya', 'spm-wustha', 'taman-seminari', 'pdf-ulya', 'pdf-wustha',
+            'mak', 'mula-dhammasekha', 'nava-dhammasekha', 'uttama-dhammasekha', 'pondok-pesantren',
+            'smag-k'
+          ];
+          const statements = defaultBentuk.map(b => env.DB.prepare(`INSERT INTO bentuk_pendidikan (bentuk) VALUES (?)`).bind(b));
+          await env.DB.batch(statements);
+        }
+        
+        const { results } = await env.DB.prepare(`SELECT bentuk FROM bentuk_pendidikan`).all();
+        return Response.json({ ok: true, data: results.map(r => r.bentuk) });
+      } catch (err) {
+        return Response.json({ ok: false, error: err.message }, { status: 500 });
+      }
+    }
+
+    // Endpoint untuk mendaftarkan bentuk pendidikan baru
+    if (url.pathname === '/api/bentuk-pendidikan' && request.method === 'POST') {
+      const secret = url.searchParams.get('secret') || request.headers.get('x-cron-secret');
+      if (!env.CRON_SECRET || secret !== env.CRON_SECRET) {
+        return new Response('Unauthorized', { status: 401 });
+      }
+      try {
+        const body = await request.json();
+        const bentuk = (body.bentuk || '').toLowerCase().trim();
+        if (!bentuk) {
+          return Response.json({ ok: false, error: 'Bentuk cannot be empty' }, { status: 400 });
+        }
+        
+        await env.DB.prepare(`CREATE TABLE IF NOT EXISTS bentuk_pendidikan (bentuk TEXT PRIMARY KEY)`).run();
+        await env.DB.prepare(`INSERT OR IGNORE INTO bentuk_pendidikan (bentuk) VALUES (?)`).bind(bentuk).run();
+        return Response.json({ ok: true, message: `Bentuk "${bentuk}" saved successfully` });
+      } catch (err) {
+        return Response.json({ ok: false, error: err.message }, { status: 500 });
+      }
+    }
+
     // Endpoint check state (optional, dipanggil GH Action sebelum start)
     if (url.pathname === '/state' && request.method === 'GET') {
       const { results } = await env.DB.prepare('SELECT bentuk_aktif, offset_terakhir FROM status_sinkronisasi WHERE id = 1').all();
