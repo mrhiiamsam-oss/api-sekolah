@@ -406,7 +406,8 @@ async function fetchCustomData() {
               namaProvinsi: provNameDB,
               waktuMulai: waktuMulai,
               activeNpsnList: fullNpsnList,
-              unrecognized_shapes: unrecognized_shapes
+              unrecognized_shapes: unrecognized_shapes,
+              totalEstimasi: currentTotalEstimasi
             });
             console.log(`🧹 Berhasil membersihkan data lama untuk ${provNameDB}. ${stats?.dihapus || 0} sekolah dihapus dan aktivitas dicatat.`);
             
