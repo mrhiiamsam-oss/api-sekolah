@@ -1129,27 +1129,30 @@ export default {
               ${extraUpdates}
           `).bind(body.namaProvinsi, api_duplicates, totalTanpaNpsn, ...extraParams).run();
 
-          // Simpan detail NPSN ganda jika ada
-          await env.DB.prepare(`
-            CREATE TABLE IF NOT EXISTS npsn_ganda_detail (
-              npsn TEXT,
-              nama_provinsi TEXT,
-              sekolah_detail TEXT,
-              PRIMARY KEY (npsn, nama_provinsi)
-            )
-          `).run();
+          // Simpan detail NPSN ganda jika ada (hanya jika ini adalah clean scan dari client)
+          const isCleanScan = customParams.isCleanScan !== false;
+          if (isCleanScan) {
+            await env.DB.prepare(`
+              CREATE TABLE IF NOT EXISTS npsn_ganda_detail (
+                npsn TEXT,
+                nama_provinsi TEXT,
+                sekolah_detail TEXT,
+                PRIMARY KEY (npsn, nama_provinsi)
+              )
+            `).run();
 
-          await env.DB.prepare(`
-            DELETE FROM npsn_ganda_detail WHERE nama_provinsi = ?
-          `).bind(body.namaProvinsi).run();
+            await env.DB.prepare(`
+              DELETE FROM npsn_ganda_detail WHERE nama_provinsi = ?
+            `).bind(body.namaProvinsi).run();
 
-          if (customParams.duplicates && customParams.duplicates.length > 0) {
-            const stmt = env.DB.prepare(`
-              INSERT OR REPLACE INTO npsn_ganda_detail (npsn, nama_provinsi, sekolah_detail)
-              VALUES (?, ?, ?)
-            `);
-            const batch = customParams.duplicates.map(d => stmt.bind(d.npsn, body.namaProvinsi, JSON.stringify(d.sekolahList)));
-            await env.DB.batch(batch);
+            if (customParams.duplicates && customParams.duplicates.length > 0) {
+              const stmt = env.DB.prepare(`
+                INSERT OR REPLACE INTO npsn_ganda_detail (npsn, nama_provinsi, sekolah_detail)
+                VALUES (?, ?, ?)
+              `);
+              const batch = customParams.duplicates.map(d => stmt.bind(d.npsn, body.namaProvinsi, JSON.stringify(d.sekolahList)));
+              await env.DB.batch(batch);
+            }
           }
         }
 

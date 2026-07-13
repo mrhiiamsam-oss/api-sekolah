@@ -439,7 +439,8 @@ async function fetchCustomData() {
         activeNpsnList: fullNpsnList,
         unrecognized_shapes: unrecognized_shapes,
         totalEstimasi: currentTotalEstimasi,
-        duplicates
+        duplicates,
+        isCleanScan: provinceStartedCleanly[kodeWilayah]
       });
       console.log(`🧹 Berhasil membersihkan data lama untuk ${provNameDB}. ${stats?.dihapus || 0} sekolah dihapus dan aktivitas dicatat.`);
       
@@ -620,10 +621,7 @@ async function runDiscoveryScan(kodeWilayah, bentukList, totalEstimasi, fullNpsn
   const concurrencyLimit = parseInt(process.env.DISCOVERY_CONCURRENCY || '20', 10) || 20;
   console.log(`Menjalankan scan discovery sebanyak maksimal ${maxPages} halaman dengan concurrency limit ${concurrencyLimit}...`);
   
-  const abortController = new AbortController();
-  try {
-    require('events').setMaxListeners(10000, abortController.signal);
-  } catch (e) {}
+  let isAborted = false;
   let foundUnrecognizedCount = 0;
   
   const offsets = [];
@@ -634,29 +632,29 @@ async function runDiscoveryScan(kodeWilayah, bentukList, totalEstimasi, fullNpsn
   let offsetIndex = 0;
   
   const fetchPage = async (offset) => {
+    if (isAborted) return [];
     const url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=${limit}&offset=${offset}`;
     try {
-      const res = await fetch(url, { signal: abortController.signal });
+      const res = await fetch(url);
       const json = await res.json();
       return json.data || [];
     } catch (err) {
-      if (err.name === 'AbortError') return [];
       console.error(`Discovery Scan gagal di offset ${offset}:`, err.message);
       return [];
     }
   };
 
   const processPage = async (offset) => {
-    if (abortController.signal.aborted) return;
+    if (isAborted) return;
     
     const data = await fetchPage(offset);
-    if (data.length === 0 || abortController.signal.aborted) {
+    if (data.length === 0 || isAborted) {
       return;
     }
     allScannedSchools.push(...data);
     
     for (const school of data) {
-      if (abortController.signal.aborted) break;
+      if (isAborted) break;
       if (!school.bentukPendidikan) continue;
       const bRaw = school.bentukPendidikan;
       const bNormalized = bRaw.toLowerCase().trim().replace(/\s+/g, '-');
@@ -666,9 +664,10 @@ async function runDiscoveryScan(kodeWilayah, bentukList, totalEstimasi, fullNpsn
         
         if (!testingShapes.has(bNormalized)) {
           const testPromise = (async () => {
+            if (isAborted) return false;
             const testUrl = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=1&offset=0&bentukPendidikan=${bNormalized}`;
             try {
-              const testRes = await fetch(testUrl, { signal: abortController.signal });
+              const testRes = await fetch(testUrl);
               const testText = await testRes.text();
               if (testRes.status === 400 || testText.includes("invalid bentuk pendidikan")) {
                 console.log(`⚠️ Bentuk pendidikan "${bRaw}" (${bNormalized}) tidak dapat dikueri di API filter (400 Bad Request). Akan disinkronkan manual.`);
@@ -678,8 +677,7 @@ async function runDiscoveryScan(kodeWilayah, bentukList, totalEstimasi, fullNpsn
                 const addRes = await fetch(`${WORKER_URL}/api/bentuk-pendidikan?secret=${CRON_SECRET}`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ bentuk: bNormalized }),
-                  signal: abortController.signal
+                  body: JSON.stringify({ bentuk: bNormalized })
                 });
                 if (addRes.ok) {
                   console.log(`✅ Berhasil mendaftarkan bentuk "${bNormalized}" ke database.`);
@@ -690,7 +688,6 @@ async function runDiscoveryScan(kodeWilayah, bentukList, totalEstimasi, fullNpsn
                 }
               }
             } catch (err) {
-              if (err.name === 'AbortError') return false;
               console.error(`Gagal menguji keabsahan bentuk "${bNormalized}":`, err.message);
               return false;
             }
@@ -716,7 +713,7 @@ async function runDiscoveryScan(kodeWilayah, bentukList, totalEstimasi, fullNpsn
         
         if (unrecognizedCount !== undefined && foundUnrecognizedCount >= unrecognizedCount) {
           console.log(`🎯 Berhasil menemukan seluruh (${unrecognizedCount}) sekolah bentuk baru/non-queryable. Menghentikan scan discovery lebih awal!`);
-          abortController.abort();
+          isAborted = true;
           break;
         }
       }
@@ -724,7 +721,7 @@ async function runDiscoveryScan(kodeWilayah, bentukList, totalEstimasi, fullNpsn
   };
 
   const runWorker = async () => {
-    while (offsetIndex < offsets.length && !abortController.signal.aborted) {
+    while (offsetIndex < offsets.length && !isAborted) {
       const currentOffset = offsets[offsetIndex++];
       await processPage(currentOffset);
     }
