@@ -416,7 +416,6 @@ export default {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="refresh" content="5">
   <title>Sekolah Sync Dashboard (D1)</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔄</text></svg>">
   <style>
@@ -430,8 +429,8 @@ export default {
       font-family: 'Inter', -apple-system, sans-serif;
       background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
       color: var(--text);
-      display: flex; justify-content: center; align-items: center;
-      min-height: 100vh; margin: 0; padding: 16px;
+      display: flex; justify-content: center; align-items: flex-start;
+      min-height: 100vh; margin: 0; padding: 40px 16px;
     }
     .card {
       background: var(--card); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
@@ -760,8 +759,32 @@ export default {
       Kunjungi Website Utama
     </a>
     
-    <div style="font-size: 12px; color: var(--text-muted); margin-top: 20px;">Halaman refresh setiap 5 detik otomatis</div>
+    <div style="font-size: 12px; color: var(--text-muted); margin-top: 20px;">Halaman refresh setiap 5 detik otomatis (Smooth)</div>
   </div>
+  <script>
+    // Smooth auto-refresh without jumping scroll
+    function startAutoRefresh() {
+      setTimeout(async () => {
+        try {
+          const res = await fetch(window.location.href);
+          const html = await res.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          
+          // Ganti isi card untuk mempertahankan scroll body
+          const newCard = doc.querySelector('.card');
+          const oldCard = document.querySelector('.card');
+          if (newCard && oldCard) {
+            oldCard.innerHTML = newCard.innerHTML;
+          }
+        } catch (e) {
+          console.error('Gagal memuat ulang data dashboard:', e);
+        }
+        startAutoRefresh(); // loop
+      }, 5000);
+    }
+    startAutoRefresh();
+  </script>
 </body>
 </html>`;
         return new Response(html, {
