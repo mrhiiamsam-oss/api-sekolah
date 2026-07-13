@@ -1108,6 +1108,11 @@ export default {
           let api_duplicates = (customParams.totalEstimasi || 0) - finalDbCount - totalTanpaNpsn - (customParams.unrecognized_shapes || 0);
           if (api_duplicates < 0) api_duplicates = 0;
 
+          const isCleanScan = customParams.isCleanScan !== false;
+          if (isCleanScan && customParams.duplicates) {
+            api_duplicates = customParams.duplicates.length;
+          }
+
           let extraColumns = '';
           let extraValues = '';
           let extraUpdates = '';
@@ -1130,7 +1135,6 @@ export default {
           `).bind(body.namaProvinsi, api_duplicates, totalTanpaNpsn, ...extraParams).run();
 
           // Simpan detail NPSN ganda jika ada (hanya jika ini adalah clean scan dari client)
-          const isCleanScan = customParams.isCleanScan !== false;
           if (isCleanScan) {
             await env.DB.prepare(`
               CREATE TABLE IF NOT EXISTS npsn_ganda_detail (
