@@ -1133,9 +1133,9 @@ export default {
               current.total_tidak_berubah || 0
             ).run();
 
-            // Hapus log aktivitas yang usianya lebih dari 3 hari
+            // Hapus log aktivitas selain hari ini (kemarin dan sebelumnya)
             await env.DB.prepare(`
-               DELETE FROM log_aktivitas_provinsi WHERE waktu_selesai < datetime('now', '+7 hours', '-3 days')
+               DELETE FROM log_aktivitas_provinsi WHERE DATE(waktu_selesai) < DATE('now', '+7 hours')
             `).run();
 
             // Update status_sinkronisasi untuk id = 2 (Custom Sync)
