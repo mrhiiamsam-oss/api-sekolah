@@ -374,7 +374,7 @@ async function fetchCustomData() {
       console.log(`Mengirim ${fullNpsnList.length} NPSN aktif ke Worker untuk deteksi penghapusan data... (Indikasi Bentuk Baru: ${unrecognized_shapes})`);
       if (unrecognized_shapes > 0) {
         console.log(`⚠️ Terdeteksi ${unrecognized_shapes} sekolah dari bentuk pendidikan yang belum terdaftar! Menjalankan Discovery Scan...`);
-        const scanRes = await runDiscoveryScan(kodeWilayah, bentukList, currentTotalEstimasi, fullNpsnList);
+        const scanRes = await runDiscoveryScan(kodeWilayah, bentukList, currentTotalEstimasi, fullNpsnList, unrecognized_shapes);
         if (scanRes && scanRes.nonQueryableCount > 0) {
           unrecognized_shapes -= scanRes.nonQueryableCount;
           if (unrecognized_shapes < 0) unrecognized_shapes = 0;
@@ -555,90 +555,132 @@ async function fetchCustomData() {
   }
 }
 
-async function runDiscoveryScan(kodeWilayah, bentukList, totalEstimasi, fullNpsnList) {
-  let offset = 0;
+async function runDiscoveryScan(kodeWilayah, bentukList, totalEstimasi, fullNpsnList, unrecognizedCount) {
   const limit = 20;
-  const scannedShapes = new Set(bentukList.map(b => b.replace(/\s+/g, '-')));
+  const initialScannedShapes = new Set(bentukList.map(b => b.replace(/\s+/g, '-')));
+  const scannedShapes = new Set(initialScannedShapes);
   
-  const testedInvalidShapes = new Set();
-  const testedValidShapes = new Set();
-  
+  const testingShapes = new Map(); // bNormalized -> Promise<boolean> (true if valid, false if invalid)
   const nonQueryableSchools = [];
   let foundNew = false;
   
   const maxPages = totalEstimasi ? Math.ceil(totalEstimasi / limit) : 350;
-  console.log(`Menjalankan scan discovery sebanyak maksimal ${maxPages} halaman...`);
   
+  const concurrencyLimit = parseInt(process.env.DISCOVERY_CONCURRENCY || '20', 10) || 20;
+  console.log(`Menjalankan scan discovery sebanyak maksimal ${maxPages} halaman dengan concurrency limit ${concurrencyLimit}...`);
+  
+  const abortController = new AbortController();
+  let foundUnrecognizedCount = 0;
+  
+  const offsets = [];
   for (let page = 0; page < maxPages; page++) {
+    offsets.push(page * limit);
+  }
+  
+  let offsetIndex = 0;
+  
+  const fetchPage = async (offset) => {
     const url = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=${limit}&offset=${offset}`;
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: abortController.signal });
       const json = await res.json();
-      const data = json.data || [];
-      if (data.length === 0) break;
+      return json.data || [];
+    } catch (err) {
+      if (err.name === 'AbortError') return [];
+      console.error(`Discovery Scan gagal di offset ${offset}:`, err.message);
+      return [];
+    }
+  };
+
+  const processPage = async (offset) => {
+    if (abortController.signal.aborted) return;
+    
+    const data = await fetchPage(offset);
+    if (data.length === 0 || abortController.signal.aborted) {
+      return;
+    }
+    
+    for (const school of data) {
+      if (abortController.signal.aborted) break;
+      if (!school.bentukPendidikan) continue;
+      const bRaw = school.bentukPendidikan;
+      const bNormalized = bRaw.toLowerCase().trim().replace(/\s+/g, '-');
       
-      for (const school of data) {
-        if (!school.bentukPendidikan) continue;
-        const bRaw = school.bentukPendidikan;
-        const bNormalized = bRaw.toLowerCase().trim().replace(/\s+/g, '-');
+      if (bNormalized && !initialScannedShapes.has(bNormalized)) {
+        foundUnrecognizedCount++;
         
-        if (bNormalized && !scannedShapes.has(bNormalized)) {
-          if (testedInvalidShapes.has(bNormalized)) {
-            if (school.npsn) {
-              nonQueryableSchools.push(school);
-              if (!fullNpsnList.includes(school.npsn)) {
-                fullNpsnList.push(school.npsn);
-              }
-            }
-            continue;
-          }
-          
-          if (testedValidShapes.has(bNormalized)) {
-            continue;
-          }
-          
-          const testUrl = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=1&offset=0&bentukPendidikan=${bNormalized}`;
-          try {
-            const testRes = await fetch(testUrl);
-            const testText = await testRes.text();
-            if (testRes.status === 400 || testText.includes("invalid bentuk pendidikan")) {
-              console.log(`⚠️ Bentuk pendidikan "${bRaw}" (${bNormalized}) tidak dapat dikueri di API filter (400 Bad Request). Akan disinkronkan manual.`);
-              testedInvalidShapes.add(bNormalized);
-              
-              if (school.npsn) {
-                nonQueryableSchools.push(school);
-                if (!fullNpsnList.includes(school.npsn)) {
-                  fullNpsnList.push(school.npsn);
+        if (!testingShapes.has(bNormalized)) {
+          const testPromise = (async () => {
+            const testUrl = `https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${kodeWilayah}?limit=1&offset=0&bentukPendidikan=${bNormalized}`;
+            try {
+              const testRes = await fetch(testUrl, { signal: abortController.signal });
+              const testText = await testRes.text();
+              if (testRes.status === 400 || testText.includes("invalid bentuk pendidikan")) {
+                console.log(`⚠️ Bentuk pendidikan "${bRaw}" (${bNormalized}) tidak dapat dikueri di API filter (400 Bad Request). Akan disinkronkan manual.`);
+                return false;
+              } else {
+                console.log(`✨ Menemukan bentuk pendidikan baru queryable dari API: "${bNormalized}" (${bRaw}) di sekolah "${school.nama}"`);
+                const addRes = await fetch(`${WORKER_URL}/api/bentuk-pendidikan?secret=${CRON_SECRET}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ bentuk: bNormalized }),
+                  signal: abortController.signal
+                });
+                if (addRes.ok) {
+                  console.log(`✅ Berhasil mendaftarkan bentuk "${bNormalized}" ke database.`);
+                  return true;
+                } else {
+                  console.error(`⚠️ Gagal mendaftarkan bentuk "${bNormalized}":`, await addRes.text());
+                  return false;
                 }
               }
-            } else {
-              console.log(`✨ Menemukan bentuk pendidikan baru queryable dari API: "${bNormalized}" (${bRaw}) di sekolah "${school.nama}"`);
-              const addRes = await fetch(`${WORKER_URL}/api/bentuk-pendidikan?secret=${CRON_SECRET}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ bentuk: bNormalized })
-              });
-              if (addRes.ok) {
-                console.log(`✅ Berhasil mendaftarkan bentuk "${bNormalized}" ke database.`);
-                scannedShapes.add(bNormalized);
-                bentukList.push(bNormalized);
-                testedValidShapes.add(bNormalized);
-                foundNew = true;
-              } else {
-                console.error(`⚠️ Gagal mendaftarkan bentuk "${bNormalized}":`, await addRes.text());
-              }
+            } catch (err) {
+              if (err.name === 'AbortError') return false;
+              console.error(`Gagal menguji keabsahan bentuk "${bNormalized}":`, err.message);
+              return false;
             }
-          } catch (err) {
-            console.error(`Gagal menguji keabsahan bentuk "${bNormalized}":`, err.message);
+          })();
+          testingShapes.set(bNormalized, testPromise);
+        }
+        
+        const isValid = await testingShapes.get(bNormalized);
+        if (isValid) {
+          if (!scannedShapes.has(bNormalized)) {
+            scannedShapes.add(bNormalized);
+            bentukList.push(bNormalized);
+            foundNew = true;
+          }
+        } else {
+          if (school.npsn) {
+            nonQueryableSchools.push(school);
+            if (!fullNpsnList.includes(school.npsn)) {
+              fullNpsnList.push(school.npsn);
+            }
           }
         }
+        
+        if (unrecognizedCount !== undefined && foundUnrecognizedCount >= unrecognizedCount) {
+          console.log(`🎯 Berhasil menemukan seluruh (${unrecognizedCount}) sekolah bentuk baru/non-queryable. Menghentikan scan discovery lebih awal!`);
+          abortController.abort();
+          break;
+        }
       }
-      offset += limit;
-    } catch (e) {
-      console.error(`Discovery Scan gagal di offset ${offset}:`, e.message);
-      break;
     }
+  };
+
+  const runWorker = async () => {
+    while (offsetIndex < offsets.length && !abortController.signal.aborted) {
+      const currentOffset = offsets[offsetIndex++];
+      await processPage(currentOffset);
+    }
+  };
+
+  const workers = [];
+  for (let i = 0; i < Math.min(concurrencyLimit, offsets.length); i++) {
+    workers.push(runWorker());
   }
+
+  await Promise.all(workers);
   
   if (nonQueryableSchools.length > 0) {
     console.log(`Upserting ${nonQueryableSchools.length} sekolah dengan bentuk pendidikan non-queryable langsung ke database...`);
