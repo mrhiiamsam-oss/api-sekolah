@@ -849,8 +849,32 @@ export default {
         if (json.success && json.data && json.data.length > 0) {
           let html = '';
           json.data.forEach(function(item) {
-            html += '<div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; border-left: 4px solid var(--danger);">' +
-                    '<div style="font-weight: bold; color: var(--primary); font-size: 14px; margin-bottom: 8px;">NPSN: ' + item.npsn + '</div>' +
+            var isIdentical = true;
+            if (item.sekolahList && item.sekolahList.length > 1) {
+              var first = item.sekolahList[0];
+              for (var i = 1; i < item.sekolahList.length; i++) {
+                var current = item.sekolahList[i];
+                if (current.nama !== first.nama ||
+                    current.bentuk !== first.bentuk ||
+                    current.status !== first.status ||
+                    current.kecamatan !== first.kecamatan ||
+                    current.kabupaten !== first.kabupaten ||
+                    (current.alamat || '') !== (first.alamat || '')) {
+                  isIdentical = false;
+                  break;
+                }
+              }
+            } else {
+              isIdentical = false;
+            }
+
+            var borderColor = isIdentical ? 'var(--success)' : 'var(--danger)';
+            var badgeHtml = isIdentical 
+              ? '<span style="background: rgba(16, 185, 129, 0.1); color: var(--success); padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; margin-left: 8px; border: 1px solid rgba(16, 185, 129, 0.2);">Data Identik (Paginasi API)</span>'
+              : '<span style="background: rgba(239, 68, 68, 0.1); color: var(--danger); padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; margin-left: 8px; border: 1px solid rgba(239, 68, 68, 0.2);">Data Berbeda (NPSN Ganda)</span>';
+
+            html += '<div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; border-left: 4px solid ' + borderColor + ';">' +
+                    '<div style="font-weight: bold; color: var(--primary); font-size: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">NPSN: ' + item.npsn + badgeHtml + '</div>' +
                     '<div style="display: flex; flex-direction: column; gap: 10px;">';
             item.sekolahList.forEach(function(s) {
               html += '<div style="padding-left: 8px; border-left: 2px solid var(--border); font-size: 13px;">' +
