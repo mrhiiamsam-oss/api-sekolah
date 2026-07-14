@@ -224,15 +224,21 @@ export default {
           const lastSuksesMs = provSyncMap[d.nama];
           d.isSyncedToday = lastSuksesMs && new Date(lastSuksesMs).toISOString().split('T')[0] === todayDateWIB;
 
-          if (d.isSyncedToday) return false;
-
           if (isMandatoryUpdateDay) {
-            return todaySchedule.includes(d.nama) || tomorrowSchedule.includes(d.nama);
+            if (todaySchedule.includes(d.nama)) {
+              if (d.isSyncedToday) return false;
+              return true;
+            }
+            if (tomorrowSchedule.includes(d.nama)) {
+              return true;
+            }
+            return false;
           } else {
             // Sertakan jadwal besok jika besok adalah hari Full Sync
             if (isTomorrowMandatory && tomorrowScheduleList.includes(d.nama)) {
               return true;
             }
+            if (d.isSyncedToday) return false;
             if (Math.abs(d.selisih) === 0 || d.is_sinkron_walau_selisih) return false;
             return true;
           }
