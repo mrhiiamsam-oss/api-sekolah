@@ -215,6 +215,10 @@ export default {
         const todaySchedule = SCHEDULE[currentDayOfWeek] || [];
         const tomorrowSchedule = SCHEDULE[nextDayOfWeek] || [];
 
+        const tomorrowDayOfWeek = (currentDayOfWeek % 7) + 1;
+        const isTomorrowMandatory = (tomorrowDayOfWeek === 3 || tomorrowDayOfWeek === 4);
+        const tomorrowScheduleList = SCHEDULE[tomorrowDayOfWeek] || [];
+
         const todayDateWIB = currentDate.toISOString().split('T')[0];
         const diffData = compareCache && compareCache.value ? compareCache.value.filter(d => {
           const lastSuksesMs = provSyncMap[d.nama];
@@ -223,6 +227,10 @@ export default {
           if (isMandatoryUpdateDay) {
             return todaySchedule.includes(d.nama) || tomorrowSchedule.includes(d.nama);
           } else {
+            // Sertakan jadwal besok jika besok adalah hari Full Sync
+            if (isTomorrowMandatory && tomorrowScheduleList.includes(d.nama)) {
+              return true;
+            }
             if (d.isSyncedToday) return false;
             if (Math.abs(d.selisih) === 0 || d.is_sinkron_walau_selisih) return false;
             return true;
@@ -237,6 +245,35 @@ export default {
             if (!aIsToday && bIsToday) return 1;
             if (aIsToday && bIsToday) return todaySchedule.indexOf(a.nama) - todaySchedule.indexOf(b.nama);
             return tomorrowSchedule.indexOf(a.nama) - tomorrowSchedule.indexOf(b.nama);
+          });
+        } else if (isTomorrowMandatory) {
+          diffData.sort((a, b) => {
+            // Urutkan yang masuk kategori "hari ini" (punya selisih & belum sync hari ini) di awal
+            const aIsToday = !a.isSyncedToday && (Math.abs(a.selisih) > 0 && !a.is_sinkron_walau_selisih);
+            const bIsToday = !b.isSyncedToday && (Math.abs(b.selisih) > 0 && !b.is_sinkron_walau_selisih);
+
+            if (aIsToday && !bIsToday) return -1;
+            if (!aIsToday && bIsToday) return 1;
+
+            if (aIsToday && bIsToday) {
+              const aHasSynced = a.terakhir_sukses ? 1 : 0;
+              const bHasSynced = b.terakhir_sukses ? 1 : 0;
+              if (aHasSynced !== bHasSynced) return aHasSynced - bHasSynced;
+
+              if (aHasSynced && bHasSynced) {
+                const timeA = new Date(a.terakhir_sukses).getTime();
+                const timeB = new Date(b.terakhir_sukses).getTime();
+                if (timeA !== timeB) return timeA - timeB;
+              }
+              const maxDiffA = Math.abs(a.selisih);
+              const maxDiffB = Math.abs(b.selisih);
+              return maxDiffB - maxDiffA;
+            }
+
+            // Kategori "besok" (Full Sync besok)
+            const aIndex = tomorrowScheduleList.indexOf(a.nama);
+            const bIndex = tomorrowScheduleList.indexOf(b.nama);
+            return aIndex - bIndex;
           });
         } else {
           diffData.sort((a, b) => {
@@ -342,51 +379,85 @@ export default {
                 </tr>
               </thead>
               <tbody>
-                ${diffData.length === 0 ? `
+                 ${diffData.length === 0 ? `
                   <tr><td colspan="5" style="padding: 24px; text-align: center; color: var(--success); font-weight: 600;">✅ Semua provinsi sudah sinkron sepenuhnya!</td></tr>
-                ` : diffData.map((d, i) => {
-          let isToday = false;
+                ` : (() => {
+                  let todayQueueNum = 0;
+                  let tomorrowQueueNum = 0;
+                  return diffData.map((d, i) => {
+                    let isPartofTodaySync = false;
+                    if (isMandatoryUpdateDay) {
+                      isPartofTodaySync = todaySchedule.includes(d.nama);
+                    } else {
+                      isPartofTodaySync = !d.isSyncedToday && (Math.abs(d.selisih) > 0 && !d.is_sinkron_walau_selisih);
+                    }
 
-          if (!d.isSyncedToday) {
-            const isFirstUnsynced = !diffData.slice(0, i).some(prev => !prev.isSyncedToday);
-            if (runningTotalEstimasi + d.total_api <= SISA_KUOTA) {
-              isToday = true;
-              runningTotalEstimasi += d.total_api;
-            } else if (isFirstUnsynced && SISA_KUOTA > 0) {
-              isToday = true;
-              runningTotalEstimasi += d.total_api;
-            }
-          }
+                    let isToday = false;
+                    if (isPartofTodaySync && !d.isSyncedToday) {
+                      const isFirstUnsynced = !diffData.slice(0, i).some(prev => {
+                        let prevPartOfToday = isMandatoryUpdateDay ? todaySchedule.includes(prev.nama) : (!prev.isSyncedToday && (Math.abs(prev.selisih) > 0 && !prev.is_sinkron_walau_selisih));
+                        return prevPartOfToday && !prev.isSyncedToday;
+                      });
+                      if (runningTotalEstimasi + d.total_api <= SISA_KUOTA) {
+                        isToday = true;
+                        runningTotalEstimasi += d.total_api;
+                      } else if (isFirstUnsynced && SISA_KUOTA > 0) {
+                        isToday = true;
+                        runningTotalEstimasi += d.total_api;
+                      }
+                    }
 
-          const isSynced = Math.abs(d.selisih) === 0 || d.is_sinkron_walau_selisih;
-          let statusLabel = isToday ? '<span style="color: var(--warning); font-weight: 600;">⏳ Dieksekusi Hari Ini</span>' : '<span style="color: var(--text-muted);">Antre Besok</span>';
+                    let statusLabel = '';
+                    let rowStyle = 'border-bottom: 1px solid var(--border);';
 
-          let rowStyle = 'border-bottom: 1px solid var(--border);';
-          if (d.isSyncedToday) {
-            statusLabel = '<span style="color: var(--success); font-weight: 600;">✅ Selesai Hari Ini</span>';
-          } else if (isActive && activeProvince === d.nama) {
-            statusLabel = '<span style="color: var(--warning); font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 4px;"><span class="spin-icon">🔄</span> Proses Sinkron</span>';
-            rowStyle = 'border-bottom: 1px solid var(--border); background: rgba(245, 158, 11, 0.15);';
-          }
+                    if (d.isSyncedToday) {
+                      statusLabel = '<span style="color: var(--success); font-weight: 600;">✅ Selesai Hari Ini</span>';
+                    } else if (isActive && activeProvince === d.nama) {
+                      statusLabel = '<span style="color: var(--warning); font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 4px;"><span class="spin-icon">🔄</span> Proses Sinkron</span>';
+                      rowStyle = 'border-bottom: 1px solid var(--border); background: rgba(245, 158, 11, 0.15);';
+                    } else {
+                      const isTomorrowSync = isTomorrowMandatory && tomorrowScheduleList.includes(d.nama);
+                      const isTomorrowSyncOnMandatoryDay = isMandatoryUpdateDay && tomorrowSchedule.includes(d.nama);
 
-          let selisihColor = 'var(--danger)';
-          if (d.selisih === 0) {
-            selisihColor = 'var(--success)';
-          } else if (d.is_sinkron_walau_selisih) {
-            selisihColor = 'var(--warning)';
-          }
-          const selisihVal = `${d.selisih > 0 ? '+' : ''}${d.selisih.toLocaleString('id-ID')}`;
+                      if (isTomorrowSyncOnMandatoryDay) {
+                        tomorrowQueueNum++;
+                        const dayName = nextDayOfWeek === 3 ? 'Rabu' : 'Kamis';
+                        statusLabel = `<span style="color: var(--text-muted);">Full Sync (${dayName}) #${tomorrowQueueNum}</span>`;
+                      } else if (isTomorrowSync && !isPartofTodaySync) {
+                        tomorrowQueueNum++;
+                        const dayName = tomorrowDayOfWeek === 3 ? 'Rabu' : 'Kamis';
+                        statusLabel = `<span style="color: var(--text-muted);">Full Sync (${dayName}) #${tomorrowQueueNum}</span>`;
+                      } else if (isMandatoryUpdateDay && todaySchedule.includes(d.nama)) {
+                        todayQueueNum++;
+                        statusLabel = `<span style="color: var(--warning); font-weight: 600;">Antrian ke #${todayQueueNum}</span>`;
+                      } else {
+                        if (isToday) {
+                          statusLabel = '<span style="color: var(--warning); font-weight: 600;">⏳ Dieksekusi Hari Ini</span>';
+                        } else {
+                          statusLabel = '<span style="color: var(--text-muted);">Antre Besok</span>';
+                        }
+                      }
+                    }
 
-          return `
-                    <tr style="${rowStyle}">
-                      <td style="padding: 12px; text-align: left; font-weight: bold; color: var(--text); font-size: 14px;">${i + 1}</td>
-                      <td style="padding: 12px; text-align: left; font-weight: 600; color: var(--text); font-size: 14px;">${d.nama}</td>
-                      <td style="padding: 12px; text-align: center; color: var(--info); font-weight: 600; font-size: 14px;">${d.total_api.toLocaleString('id-ID')}</td>
-                      <td style="padding: 12px; text-align: center; color: ${selisihColor}; font-weight: bold; font-size: 14px;">${selisihVal}</td>
-                      <td style="padding: 12px; text-align: center; font-size: 13px;">${statusLabel}</td>
-                    </tr>
-                  `;
-        }).join('')}
+                    let selisihColor = 'var(--danger)';
+                    if (d.selisih === 0) {
+                      selisihColor = 'var(--success)';
+                    } else if (d.is_sinkron_walau_selisih) {
+                      selisihColor = 'var(--warning)';
+                    }
+                    const selisihVal = `${d.selisih > 0 ? '+' : ''}${d.selisih.toLocaleString('id-ID')}`;
+
+                    return `
+                      <tr style="${rowStyle}">
+                        <td style="padding: 12px; text-align: left; font-weight: bold; color: var(--text); font-size: 14px;">${i + 1}</td>
+                        <td style="padding: 12px; text-align: left; font-weight: 600; color: var(--text); font-size: 14px;">${d.nama}</td>
+                        <td style="padding: 12px; text-align: center; color: var(--info); font-weight: 600; font-size: 14px;">${d.total_api.toLocaleString('id-ID')}</td>
+                        <td style="padding: 12px; text-align: center; color: ${selisihColor}; font-weight: bold; font-size: 14px;">${selisihVal}</td>
+                        <td style="padding: 12px; text-align: center; font-size: 13px;">${statusLabel}</td>
+                      </tr>
+                    `;
+                  }).join('');
+                })()}
               </tbody>
             </table>
             </div>
