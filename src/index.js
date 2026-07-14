@@ -220,13 +220,16 @@ export default {
         const tomorrowScheduleList = SCHEDULE[tomorrowDayOfWeek] || [];
 
         const todayDateWIB = currentDate.toISOString().split('T')[0];
+        const yesterdayDateWIB = new Date(currentDate.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
         const diffData = compareCache && compareCache.value ? compareCache.value.filter(d => {
           const lastSuksesMs = provSyncMap[d.nama];
           d.isSyncedToday = lastSuksesMs && new Date(lastSuksesMs).toISOString().split('T')[0] === todayDateWIB;
+          d.isSyncedRecently = lastSuksesMs && (new Date(lastSuksesMs).toISOString().split('T')[0] === todayDateWIB || new Date(lastSuksesMs).toISOString().split('T')[0] === yesterdayDateWIB);
+
+          if (d.isSyncedRecently) return false;
 
           if (isMandatoryUpdateDay) {
             if (todaySchedule.includes(d.nama)) {
-              if (d.isSyncedToday) return false;
               return true;
             }
             if (tomorrowSchedule.includes(d.nama)) {
@@ -238,7 +241,6 @@ export default {
             if (isTomorrowMandatory && tomorrowScheduleList.includes(d.nama)) {
               return true;
             }
-            if (d.isSyncedToday) return false;
             if (Math.abs(d.selisih) === 0 || d.is_sinkron_walau_selisih) return false;
             return true;
           }

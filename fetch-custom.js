@@ -205,9 +205,10 @@ async function fetchCustomData() {
             
             if (isCronSchedule && d.terakhir_sukses) {
               const todayDate = currentDate.toISOString().split('T')[0];
+              const yesterdayDate = new Date(currentDate.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
               const syncedDate = d.terakhir_sukses.split(' ')[0];
-              if (syncedDate === todayDate) {
-                console.log(`✅ ${d.nama} diabaikan (Sudah tersinkronisasi hari ini)`);
+              if (syncedDate === todayDate || syncedDate === yesterdayDate) {
+                console.log(`✅ ${d.nama} diabaikan (Sudah tersinkronisasi baru-baru ini / kemarin)`);
                 return false;
               }
             }
