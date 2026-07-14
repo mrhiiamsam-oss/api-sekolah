@@ -1187,11 +1187,38 @@ export default {
               body.activeNpsnList.forEach(npsn => dbNpsnSet.delete(npsn));
 
               const deletedNpsns = Array.from(dbNpsnSet);
+              const realDeletedNpsns = [];
               if (deletedNpsns.length > 0) {
+                console.log(`Verifikasi ${deletedNpsns.length} NPSN calon dihapus ke API kementerian...`);
+                // Batasi pengecekan maksimal 20 untuk meminimalkan subrequests Cloudflare Worker
+                const checkList = deletedNpsns.slice(0, 20);
+                const keepNpsns = new Set();
+                
+                await Promise.all(checkList.map(async (npsn) => {
+                  try {
+                    const res = await fetch(`https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/360?keyword=${npsn}&limit=1`);
+                    const json = await res.json();
+                    if (json.data && json.data.length > 0) {
+                      keepNpsns.add(npsn);
+                      console.log(`[Verify] NPSN ${npsn} masih aktif di kementerian. Pertahankan di DB.`);
+                    }
+                  } catch (e) {
+                    keepNpsns.add(npsn); // Jika gagal cek, pertahankan untuk cari aman
+                  }
+                }));
+                
+                for (const npsn of deletedNpsns) {
+                  if (!keepNpsns.has(npsn)) {
+                    realDeletedNpsns.push(npsn);
+                  }
+                }
+              }
+
+              if (realDeletedNpsns.length > 0) {
                 // Eksekusi penghapusan dalam chunk untuk menghindari limit parameter bind SQLite
                 const chunkSize = 50;
-                for (let i = 0; i < deletedNpsns.length; i += chunkSize) {
-                  const chunk = deletedNpsns.slice(i, i + chunkSize);
+                for (let i = 0; i < realDeletedNpsns.length; i += chunkSize) {
+                  const chunk = realDeletedNpsns.slice(i, i + chunkSize);
                   
                   let queryDelete = `DELETE FROM sekolah WHERE npsn IN (${chunk.map(() => '?').join(',')}) AND nama_provinsi = ?`;
                   const deleteParams = [...chunk, searchProv];

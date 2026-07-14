@@ -395,9 +395,18 @@ async function fetchCustomData() {
     if (provinceStartedCleanly[kodeWilayah]) {
       const schools = allSchoolsByProv[kodeWilayah] || [];
       
-      const npsnMap = new Map();
+      // Deduplikasi record yang memiliki ID identik dari API (karena pergeseran halaman/unstable sorting API kementerian)
+      const uniqueSchoolsMap = new Map();
       for (const school of schools) {
         if (!school.npsn) continue;
+        const uniqueKey = school.satuanPendidikanId || `${school.npsn}_${(school.nama || '').trim().toUpperCase()}_${(school.bentukPendidikan || '').trim().toUpperCase()}`;
+        if (!uniqueSchoolsMap.has(uniqueKey)) {
+          uniqueSchoolsMap.set(uniqueKey, school);
+        }
+      }
+
+      const npsnMap = new Map();
+      for (const school of uniqueSchoolsMap.values()) {
         if (!npsnMap.has(school.npsn)) {
           npsnMap.set(school.npsn, []);
         }
