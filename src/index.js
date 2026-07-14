@@ -1,5 +1,11 @@
 import { VALID_BENTUK, syncBatch } from './sync.js';
 
+const cleanName = (name) => {
+  if (!name) return "";
+  let c = name.replace(/[^A-Z]/gi, '').toUpperCase();
+  return c.replace(/^PROVINSI|^PROV/, '');
+};
+
 export default {
   /** Trigger API dan Dashboard UI */
   async fetch(request, env, ctx) {
@@ -90,7 +96,7 @@ export default {
 
         const provSyncMap = {};
         provStatusList.forEach(p => {
-          provSyncMap[p.nama_provinsi] = new Date(p.terakhir_sukses.replace(' ', 'T') + '+07:00').getTime();
+          provSyncMap[cleanName(p.nama_provinsi)] = new Date(p.terakhir_sukses.replace(' ', 'T') + '+07:00').getTime();
         });
 
         const compareMap = {};
@@ -222,7 +228,7 @@ export default {
         const todayDateWIB = currentDate.toISOString().split('T')[0];
         const yesterdayDateWIB = new Date(currentDate.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
         const diffData = compareCache && compareCache.value ? compareCache.value.filter(d => {
-          const lastSuksesMs = provSyncMap[d.nama];
+          const lastSuksesMs = provSyncMap[cleanName(d.nama)];
           d.isSyncedToday = lastSuksesMs && new Date(lastSuksesMs).toISOString().split('T')[0] === todayDateWIB;
           d.isSyncedRecently = lastSuksesMs && (new Date(lastSuksesMs).toISOString().split('T')[0] === todayDateWIB || new Date(lastSuksesMs).toISOString().split('T')[0] === yesterdayDateWIB);
 
@@ -1008,6 +1014,8 @@ export default {
       }
     }
 
+
+
     // Endpoint Perbandingan Data (API)
     if (url.pathname === '/api/compare' && request.method === 'GET') {
       try {
@@ -1072,11 +1080,7 @@ export default {
           GROUP BY nama_provinsi
         `).all();
 
-        const cleanName = (name) => {
-          if (!name) return "";
-          let c = name.replace(/[^A-Z]/gi, '').toUpperCase();
-          return c.replace(/^PROVINSI|^PROV/, '');
-        };
+        // cleanName defined globally
 
         await env.DB.prepare(`CREATE TABLE IF NOT EXISTS provinsi_sync_status (nama_provinsi TEXT PRIMARY KEY, terakhir_sukses TIMESTAMPTZ)`).run();
 
