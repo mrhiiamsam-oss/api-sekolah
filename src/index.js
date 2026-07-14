@@ -100,6 +100,8 @@ export default {
 
         let sumTotalApi = 0;
         let sumTotalDb = 0;
+        let sumApiDuplicates = 0;
+        let sumAdjustedSelisih = 0;
         let diffCount = 0;
 
         if (compareCache) {
@@ -110,6 +112,8 @@ export default {
 
             sumTotalApi += d.total_api || 0;
             sumTotalDb += d.total_db || 0;
+            sumApiDuplicates += d.api_duplicates || 0;
+            sumAdjustedSelisih += d.selisih || 0;
             if (d.selisih !== 0) diffCount++;
           });
           compareCache.value.sort((a, b) => {
@@ -172,14 +176,26 @@ export default {
           }
 
           // Tambahkan baris total
-          const totalSelisih = sumTotalApi - sumTotalDb;
-          const totalColor = totalSelisih === 0 ? 'var(--success)' : 'var(--danger)';
+          let totalSelisihHtml = '';
+          if (sumApiDuplicates > 0 && sumAdjustedSelisih !== 0) {
+            totalSelisihHtml = `
+              <div style="color: var(--success); font-weight: bold;">+${sumApiDuplicates.toLocaleString('id-ID')} ✅</div>
+              <div style="color: var(--danger); font-weight: bold; margin-top: 4px;">${sumAdjustedSelisih > 0 ? '+' : ''}${sumAdjustedSelisih.toLocaleString('id-ID')} ⚠️</div>
+            `;
+          } else if (sumApiDuplicates > 0) {
+            totalSelisihHtml = `<div style="color: var(--success); font-weight: bold;">+${sumApiDuplicates.toLocaleString('id-ID')} ✅</div>`;
+          } else if (sumAdjustedSelisih !== 0) {
+            totalSelisihHtml = `<div style="color: var(--danger); font-weight: bold;">${sumAdjustedSelisih > 0 ? '+' : ''}${sumAdjustedSelisih.toLocaleString('id-ID')} ⚠️</div>`;
+          } else {
+            totalSelisihHtml = `<div style="color: var(--success); font-weight: bold;">0</div>`;
+          }
+
           compareHtml += `
              <tr class="hidden-row" style="display: none; border-top: 2px solid var(--border); font-weight: bold; background: rgba(0,0,0,0.03);">
                <td style="padding: 12px 8px; color: var(--text);">TOTAL KESELURUHAN</td>
                <td style="padding: 12px 8px; text-align: center; color: var(--info); font-size: 14px;">${sumTotalApi.toLocaleString('id-ID')}</td>
                <td style="padding: 12px 8px; text-align: center; color: var(--primary-light); font-size: 14px;">${sumTotalDb.toLocaleString('id-ID')}</td>
-               <td style="padding: 12px 8px; text-align: center; color: ${totalColor}; font-size: 14px;">${totalSelisih > 0 ? '+' : ''}${totalSelisih.toLocaleString('id-ID')}</td>
+               <td style="padding: 12px 8px; text-align: center; font-size: 14px; vertical-align: middle;">${totalSelisihHtml}</td>
                <td style="padding: 12px 8px; text-align: center; font-size: 12px;">${diffCount} Provinsi Berselisih</td>
              </tr>
            `;
