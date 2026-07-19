@@ -207,9 +207,20 @@ async function fetchCustomData() {
               const todayDate = currentDate.toISOString().split('T')[0];
               const yesterdayDate = new Date(currentDate.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
               const syncedDate = d.terakhir_sukses.split(' ')[0];
-              if (syncedDate === todayDate || syncedDate === yesterdayDate) {
-                console.log(`✅ ${d.nama} diabaikan (Sudah tersinkronisasi baru-baru ini / kemarin)`);
-                return false;
+              
+              if (isMandatoryUpdateDay) {
+                // Pada hari wajib update (Rabu/Kamis), HANYA abaikan jika sudah disinkronkan HARI INI.
+                // Jangan abaikan jika disinkronkan kemarin (Selasa/Rabu), karena hari ini adalah jadwal wajibnya (Full Sync).
+                if (syncedDate === todayDate) {
+                  console.log(`✅ ${d.nama} diabaikan (Sudah tersinkronisasi jadwal Full Sync hari ini)`);
+                  return false;
+                }
+              } else {
+                // Pada hari biasa (Smart Sync), abaikan jika sudah disinkronkan hari ini ATAU kemarin agar sinkronisasi merata
+                if (syncedDate === todayDate || syncedDate === yesterdayDate) {
+                  console.log(`✅ ${d.nama} diabaikan (Sudah tersinkronisasi baru-baru ini / kemarin)`);
+                  return false;
+                }
               }
             }
             return true;
