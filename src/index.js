@@ -140,8 +140,8 @@ export default {
               selisihColor = 'var(--success)';
               statusIcon = '✅ Sinkron';
             } else if (d.is_sinkron_walau_selisih) {
-              selisihColor = 'var(--warning)';
-              statusIcon = '✅ Sinkron (Ada NPSN Kosong)';
+              selisihColor = 'var(--success)';
+              statusIcon = '✅ Sinkron (Data API Tanpa NPSN)';
             } else if (d.selisih < 0) {
               selisihColor = 'var(--warning)';
               statusIcon = '⚠️ Ada Pengurangan Data';
