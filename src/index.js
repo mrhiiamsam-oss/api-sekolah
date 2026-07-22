@@ -337,12 +337,12 @@ export default {
 
         let activeProvince = null;
         let isActive = false;
-        if (row2 && row2.updated_at) {
-          const updatedAt = new Date(row2.updated_at.replace(' ', 'T') + '+07:00').getTime();
+        if (activeRow && activeRow.updated_at) {
+          const updatedAt = new Date(activeRow.updated_at.replace(' ', 'T') + '+07:00').getTime();
           if (Date.now() - updatedAt < 5 * 60000) {
             isActive = true;
-            if (row2.bentuk_aktif) {
-              const match = row2.bentuk_aktif.match(/\((.*?)\)/);
+            if (activeRow.bentuk_aktif) {
+              const match = activeRow.bentuk_aktif.match(/\((.*?)\)/);
               if (match) activeProvince = match[1];
             }
           }
@@ -427,7 +427,7 @@ export default {
 
                     if (d.isSyncedToday) {
                       statusLabel = '<span style="color: var(--success); font-weight: 600;">✅ Selesai Hari Ini</span>';
-                    } else if (isActive && activeProvince === d.nama) {
+                    } else if (isActive && activeProvince && cleanName(activeProvince) === cleanName(d.nama)) {
                       statusLabel = '<span style="color: var(--warning); font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 4px;"><span class="spin-icon">🔄</span> Proses Sinkron</span>';
                       rowStyle = 'border-bottom: 1px solid var(--border); background: rgba(245, 158, 11, 0.15);';
                     } else {
