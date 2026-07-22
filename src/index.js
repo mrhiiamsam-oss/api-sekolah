@@ -141,10 +141,13 @@ export default {
               statusIcon = '✅ Sinkron';
             } else if (d.is_sinkron_walau_selisih) {
               selisihColor = 'var(--warning)';
-              statusIcon = '✅ Berbeda';
+              statusIcon = '✅ Sinkron (Ada NPSN Kosong)';
+            } else if (d.selisih < 0) {
+              selisihColor = 'var(--warning)';
+              statusIcon = '⚠️ Ada Pengurangan Data';
             } else if (isSyncedToday) {
               selisihColor = 'var(--warning)';
-              statusIcon = '✅ Selesai (Ada Data Gagal)';
+              statusIcon = '⚠️ Terputus / Ada Data Gagal';
             }
 
             const displayStyle = idx >= 5 ? 'display: none;' : '';
