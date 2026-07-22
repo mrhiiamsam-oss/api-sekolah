@@ -24,6 +24,13 @@ const BENTUK_GROUP = {
 
 let PROVINCES = {};
 
+const cleanName = (name) => {
+  if (!name) return "";
+  let c = name.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+  return c.replace(/^PROVINSI|^PROV/, '');
+};
+
+
 async function loadProvinces() {
   try {
     console.log("Mengambil referensi kode wilayah provinsi dari API Belajar.id...");
@@ -189,7 +196,7 @@ async function fetchCustomData() {
               console.log("🌟 Mode Full Sync Harian aktif! Memproses jadwal provinsi hari ini.");
               const scheduledNames = SCHEDULE[currentDayOfWeek];
               kodeWilayahList = scheduledNames.map(name => {
-                 return Object.keys(PROVINCES).find(k => PROVINCES[k] === name);
+                 return Object.keys(PROVINCES).find(k => cleanName(PROVINCES[k]) === cleanName(name));
               }).filter(k => k);
             } else {
               console.log("🌟 Mode Smart Sync Global aktif! Mengabaikan jadwal harian dan memprioritaskan selisih terbesar dari SELURUH provinsi.");
@@ -239,7 +246,9 @@ async function fetchCustomData() {
           if (isMandatoryUpdateDay && isCronSchedule) {
             diffCodes.sort((a, b) => {
                const scheduleArr = SCHEDULE[currentDayOfWeek] || [];
-               return scheduleArr.indexOf(a.nama) - scheduleArr.indexOf(b.nama);
+               const indexA = scheduleArr.findIndex(s => cleanName(s) === cleanName(a.nama));
+               const indexB = scheduleArr.findIndex(s => cleanName(s) === cleanName(b.nama));
+               return (indexA !== -1 ? indexA : 999) - (indexB !== -1 ? indexB : 999);
             });
           } else {
             diffCodes.sort((a, b) => {
