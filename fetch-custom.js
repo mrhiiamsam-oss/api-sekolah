@@ -294,6 +294,10 @@ async function fetchCustomData() {
             }
           }
   
+          if (fs.existsSync('ada_sisa_harian.json')) {
+            try { fs.unlinkSync('ada_sisa_harian.json'); } catch(e) {}
+          }
+
           if (finalTargets.length === 0) {
             console.log(`✅ SEMUA PROVINSI SUDAH SINKRON. Tidak ada yang perlu disinkronkan. Membatalkan sinkronisasi untuk menghemat resource.`);
             kodeWilayahList = [];
@@ -302,7 +306,13 @@ async function fetchCustomData() {
             console.log(`🚀 Smart Sync Cerdas mendeteksi ${diffCodes.length} provinsi dengan data tidak sinkron.`);
             console.log(`   Memilih ${finalTargets.length} provinsi [${targetNames.join(', ')}] untuk disinkronisasi hari ini dengan estimasi ~${totalDataSaatIni.toLocaleString('id-ID')} data.`);
             if (diffCodes.length > finalTargets.length) {
-               console.log(`   ⚠️ Sisa ${diffCodes.length - finalTargets.length} provinsi akan otomatis antre untuk dieksekusi besok karena batas aman harian (${BATAS_AMAN_DATA_PER_HARI.toLocaleString('id-ID')} data).`);
+               if (totalDataSaatIni < BATAS_AMAN_DATA_PER_HARI) {
+                 const sisaProv = diffCodes.length - finalTargets.length;
+                 console.log(`   ⚠️ Masih ada sisa ${sisaProv} provinsi di antrean hari ini dan kuota harian (${totalDataSaatIni.toLocaleString('id-ID')} / ${BATAS_AMAN_DATA_PER_HARI.toLocaleString('id-ID')}) belum penuh. Membuat flag auto-continue...`);
+                 fs.writeFileSync('ada_sisa_harian.json', JSON.stringify({ sisaProv, totalDataSaatIni }));
+               } else {
+                 console.log(`   ⚠️ Sisa ${diffCodes.length - finalTargets.length} provinsi akan otomatis antre untuk dieksekusi besok karena batas aman harian (${BATAS_AMAN_DATA_PER_HARI.toLocaleString('id-ID')} data) sudah penuh.`);
+               }
             }
             kodeWilayahList = finalTargets;
           }

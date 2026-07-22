@@ -20,6 +20,7 @@ permissions:
 jobs:
   run-daily-chunk:
     runs-on: ubuntu-latest
+    timeout-minutes: 300
     steps:
       - name: Ambil kode dari repository
         uses: actions/checkout@v3
@@ -55,3 +56,16 @@ jobs:
           MULAI_DARI_AWAL: "true"
           IS_CRON_SCHEDULE: ${{ env.IS_CRON }}
         run: node fetch-custom.js
+
+      - name: Jalankan Ulang Otomatis Jika Masih Ada Antrean dan Kuota Belum Habis
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f ada_sisa_harian.json ]; then
+            echo "Deteksi masih ada sisa antrean provinsi hari ini dan kuota harian belum penuh."
+            echo "Memicu workflow baru secara otomatis untuk melanjutkan penarikan..."
+            gh workflow run jalankan-skrip.yml -f pilihan_provinsi="${{ github.event.inputs.pilihan_provinsi }}"
+          else
+            echo "Selesai! Seluruh antrean hari ini telah diproses atau kuota harian telah penuh."
+          fi
