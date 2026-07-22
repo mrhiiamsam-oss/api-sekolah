@@ -220,9 +220,9 @@ export default {
           3: ["JAWA TIMUR", "JAWA TENGAH", "BANTEN", "LAMPUNG", "NUSA TENGGARA TIMUR", "RIAU", "SUMATERA BARAT", "DKI JAKARTA", "JAMBI", "DI YOGYAKARTA", "SULAWESI TENGGARA", "SULAWESI UTARA", "MALUKU", "MALUKU UTARA", "KEPULAUAN RIAU", "KEPULAUAN BANGKA BELITUNG", "PAPUA PEGUNUNGAN", "PAPUA TENGAH", "PAPUA BARAT DAYA", "LUAR NEGERI"],
           4: ["JAWA BARAT", "SUMATERA UTARA", "SULAWESI SELATAN", "SUMATERA SELATAN", "NUSA TENGGARA BARAT", "ACEH", "KALIMANTAN BARAT", "KALIMANTAN SELATAN", "SULAWESI TENGAH", "KALIMANTAN TENGAH", "KALIMANTAN TIMUR", "BALI", "BENGKULU", "SULAWESI BARAT", "GORONTALO", "PAPUA", "KALIMANTAN UTARA", "PAPUA BARAT", "PAPUA SELATAN"]
         };
-        const nextDayOfWeek = (currentDayOfWeek === 3) ? 4 : 3; // Jika Rabu(3), besok(Kamis 4). Selain itu, antrean berikutnya di hari Rabu(3).
+        const nextDayOfWeek = (currentDayOfWeek === 3) ? 4 : null; // Jika Rabu(3), besok(Kamis 4). Kamis tidak punya besok Full Sync.
         const todaySchedule = SCHEDULE[currentDayOfWeek] || [];
-        const tomorrowSchedule = SCHEDULE[nextDayOfWeek] || [];
+        const tomorrowSchedule = nextDayOfWeek ? SCHEDULE[nextDayOfWeek] : [];
 
         const tomorrowDayOfWeek = (currentDayOfWeek % 7) + 1;
         const isTomorrowMandatory = (tomorrowDayOfWeek === 3 || tomorrowDayOfWeek === 4);
@@ -244,7 +244,8 @@ export default {
             if (tomorrowSchedule.includes(d.nama)) {
               return true;
             }
-            return false;
+            if (Math.abs(d.selisih) === 0 || d.is_sinkron_walau_selisih) return false;
+            return true;
           } else {
             // Sertakan jadwal besok jika besok adalah hari Full Sync
             if (isTomorrowMandatory && tomorrowScheduleList.includes(d.nama)) {
@@ -262,7 +263,21 @@ export default {
             if (aIsToday && !bIsToday) return -1;
             if (!aIsToday && bIsToday) return 1;
             if (aIsToday && bIsToday) return todaySchedule.indexOf(a.nama) - todaySchedule.indexOf(b.nama);
-            return tomorrowSchedule.indexOf(a.nama) - tomorrowSchedule.indexOf(b.nama);
+            
+            if (currentDayOfWeek === 3) {
+              const aIsTomorrow = tomorrowSchedule.includes(a.nama);
+              const bIsTomorrow = tomorrowSchedule.includes(b.nama);
+              if (aIsTomorrow && !bIsTomorrow) return -1;
+              if (!aIsTomorrow && bIsTomorrow) return 1;
+              if (aIsTomorrow && bIsTomorrow) return tomorrowSchedule.indexOf(a.nama) - tomorrowSchedule.indexOf(b.nama);
+            }
+
+            const aHasSynced = a.terakhir_sukses ? 1 : 0;
+            const bHasSynced = b.terakhir_sukses ? 1 : 0;
+            if (aHasSynced !== bHasSynced) return aHasSynced - bHasSynced;
+            const maxDiffA = Math.abs(a.selisih);
+            const maxDiffB = Math.abs(b.selisih);
+            return maxDiffB - maxDiffA;
           });
         } else if (isTomorrowMandatory) {
           diffData.sort((a, b) => {
@@ -437,9 +452,9 @@ export default {
                       const isTomorrowSync = isTomorrowMandatory && tomorrowScheduleList.includes(d.nama);
                       const isTomorrowSyncOnMandatoryDay = isMandatoryUpdateDay && tomorrowSchedule.includes(d.nama);
 
-                      if (isTomorrowSyncOnMandatoryDay) {
+                      if (isTomorrowSyncOnMandatoryDay && currentDayOfWeek === 3) {
                         tomorrowQueueNum++;
-                        const dayName = nextDayOfWeek === 3 ? 'Rabu' : 'Kamis';
+                        const dayName = 'Kamis';
                         statusLabel = `<span style="color: var(--text-muted);">Full Sync (${dayName}) #${tomorrowQueueNum}</span>`;
                       } else if (isTomorrowSync && !isPartofTodaySync) {
                         tomorrowQueueNum++;
@@ -452,7 +467,10 @@ export default {
                         if (isToday) {
                           statusLabel = '<span style="color: var(--warning); font-weight: 600;">⏳ Dieksekusi Hari Ini</span>';
                         } else {
-                          statusLabel = '<span style="color: var(--text-muted);">Antre Besok</span>';
+                          tomorrowQueueNum++;
+                          const dayNameMap = {1: 'Senin', 2: 'Selasa', 3: 'Rabu', 4: 'Kamis', 5: "Jum'at", 6: 'Sabtu', 7: 'Minggu'};
+                          const tomorrowName = dayNameMap[tomorrowDayOfWeek];
+                          statusLabel = `<span style="color: var(--text-muted);">Smart Sync (${tomorrowName}) #${tomorrowQueueNum}</span>`;
                         }
                       }
                     }
