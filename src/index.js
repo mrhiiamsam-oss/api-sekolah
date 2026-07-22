@@ -96,7 +96,9 @@ export default {
 
         const provSyncMap = {};
         provStatusList.forEach(p => {
-          provSyncMap[cleanName(p.nama_provinsi)] = new Date(p.terakhir_sukses.replace(' ', 'T') + '+07:00').getTime();
+          if (p.terakhir_sukses) {
+            provSyncMap[cleanName(p.nama_provinsi)] = p.terakhir_sukses.split(' ')[0];
+          }
         });
 
         const compareMap = {};
@@ -231,27 +233,29 @@ export default {
         const todayDateWIB = currentDate.toISOString().split('T')[0];
         const yesterdayDateWIB = new Date(currentDate.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
         const diffData = compareCache && compareCache.value ? compareCache.value.filter(d => {
-          const lastSuksesMs = provSyncMap[cleanName(d.nama)];
-          d.isSyncedToday = lastSuksesMs && new Date(lastSuksesMs).toISOString().split('T')[0] === todayDateWIB;
-          d.isSyncedRecently = lastSuksesMs && (new Date(lastSuksesMs).toISOString().split('T')[0] === todayDateWIB || new Date(lastSuksesMs).toISOString().split('T')[0] === yesterdayDateWIB);
+          const syncedDate = provSyncMap[cleanName(d.nama)];
+          d.isSyncedToday = syncedDate === todayDateWIB;
+          d.isSyncedRecently = syncedDate === todayDateWIB || syncedDate === yesterdayDateWIB;
 
-          if (d.isSyncedRecently) return false;
+          const hasDiff = Math.abs(d.selisih) > 0 && !d.is_sinkron_walau_selisih;
+
+          // Jika sudah tersinkron hari ini dan TIDAK ada selisih, selalu sembunyikan
+          if (d.isSyncedToday && !hasDiff) return false;
 
           if (isMandatoryUpdateDay) {
-            if (todaySchedule.includes(d.nama)) {
-              return true;
-            }
-            if (tomorrowSchedule.includes(d.nama)) {
-              return true;
-            }
-            if (Math.abs(d.selisih) === 0 || d.is_sinkron_walau_selisih) return false;
-            return true;
+            // Pada hari wajib, tampilkan yang terjadwal (jika belum sinkron hari ini)
+            if (todaySchedule.includes(d.nama) && !d.isSyncedToday) return true;
+            if (tomorrowSchedule.includes(d.nama)) return true;
+            
+            // Selain itu, tampilkan HANYA jika ada selisih (untuk antre besok)
+            if (hasDiff) return true;
+            return false;
           } else {
-            // Sertakan jadwal besok jika besok adalah hari Full Sync
-            if (isTomorrowMandatory && tomorrowScheduleList.includes(d.nama)) {
-              return true;
-            }
-            if (Math.abs(d.selisih) === 0 || d.is_sinkron_walau_selisih) return false;
+            // Pada hari biasa, jika tidak ada selisih, sembunyikan
+            if (!hasDiff) return false;
+
+            // Jika ada selisih tapi sudah disinkron hari ini, tetap tampilkan (dengan status Smart Sync Besok)
+            // Jadi tidak perlu difilter meskipun d.isSyncedToday true
             return true;
           }
         }) : [];
@@ -443,11 +447,14 @@ export default {
                     let statusLabel = '';
                     let rowStyle = 'border-bottom: 1px solid var(--border);';
 
-                    if (d.isSyncedToday) {
-                      statusLabel = '<span style="color: var(--success); font-weight: 600;">✅ Selesai Hari Ini</span>';
-                    } else if (isActive && activeProvince && cleanName(activeProvince) === cleanName(d.nama)) {
+                    if (isActive && activeProvince && cleanName(activeProvince) === cleanName(d.nama)) {
                       statusLabel = '<span style="color: var(--warning); font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 4px;"><span class="spin-icon">🔄</span> Proses Sinkron</span>';
                       rowStyle = 'border-bottom: 1px solid var(--border); background: rgba(245, 158, 11, 0.15);';
+                    } else if (d.isSyncedToday) {
+                      tomorrowQueueNum++;
+                      const dayNameMap = {1: 'Senin', 2: 'Selasa', 3: 'Rabu', 4: 'Kamis', 5: "Jum'at", 6: 'Sabtu', 7: 'Minggu'};
+                      const tomorrowName = dayNameMap[tomorrowDayOfWeek];
+                      statusLabel = `<span style="color: var(--text-muted);">Smart Sync (${tomorrowName}) #${tomorrowQueueNum}</span>`;
                     } else {
                       const isTomorrowSync = isTomorrowMandatory && tomorrowScheduleList.includes(d.nama);
                       const isTomorrowSyncOnMandatoryDay = isMandatoryUpdateDay && tomorrowSchedule.includes(d.nama);

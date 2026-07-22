@@ -223,9 +223,10 @@ async function fetchCustomData() {
                   return false;
                 }
               } else {
-                // Pada hari biasa (Smart Sync), abaikan jika sudah disinkronkan hari ini ATAU kemarin agar sinkronisasi merata
-                if (syncedDate === todayDate || syncedDate === yesterdayDate) {
-                  console.log(`✅ ${d.nama} diabaikan (Sudah tersinkronisasi baru-baru ini / kemarin)`);
+                // Pada hari biasa (Smart Sync), abaikan HANYA jika sudah disinkronkan hari ini.
+                // Jika disinkron kemarin namun masih ada selisih, ia akan disinkron ulang hari ini.
+                if (syncedDate === todayDate) {
+                  console.log(`✅ ${d.nama} diabaikan (Sudah tersinkronisasi hari ini, tunggu besok jika masih ada selisih)`);
                   return false;
                 }
               }
