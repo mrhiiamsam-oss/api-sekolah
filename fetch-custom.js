@@ -285,14 +285,10 @@ async function fetchCustomData() {
             if (totalDataSaatIni + p.total_api <= BATAS_AMAN_DATA_PER_HARI) {
               finalTargets.push(p.kode);
               totalDataSaatIni += p.total_api;
-            } else if (finalTargets.length === 0 && totalDataSaatIni < BATAS_AMAN_DATA_PER_HARI) {
-              // Jika kita belum menambahkan target sama sekali, DAN kuota harian BELUM sepenuhnya habis.
-              // Kita eksekusi item pertama meskipun akan sedikit melebihi limit.
+            } else if (finalTargets.length === 0 && totalDataSaatIni === 0) {
+              // Jika hari ini belum sinkron SAMA SEKALI dan tidak ada yang muat, paksa eksekusi 1 yang pertama agar tidak deadlock
               finalTargets.push(p.kode);
               totalDataSaatIni += p.total_api;
-              break;
-            } else {
-              // Kuota harian sudah penuh
               break;
             }
           }
