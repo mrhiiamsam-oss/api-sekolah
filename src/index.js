@@ -340,7 +340,8 @@ export default {
           });
         }
 
-        const BATAS_AMAN = 500000;
+        const dynamicFullSyncLimit = sumTotalApi > 0 ? Math.ceil(sumTotalApi / 2) : 250000;
+        const BATAS_AMAN = isMandatoryUpdateDay ? dynamicFullSyncLimit : 100000;
         let syncedToday = 0;
         try {
           const { results: syncedTodayRes } = await env.DB.prepare("SELECT SUM(total_baru + total_diperbarui + total_tidak_berubah) as total FROM log_aktivitas_provinsi WHERE DATE(waktu_selesai) = DATE('now', '+7 hours')").all();
@@ -400,8 +401,8 @@ export default {
           <div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 24px;">
             <div style="padding: 12px 16px; background: rgba(0,0,0,0.03); font-size: 13px; color: var(--text-muted); border-bottom: 1px solid var(--border); line-height: 1.5;">
               Sistem secara cerdas mendeteksi provinsi mana yang butuh pembaruan. Provinsi dengan data tidak sinkron (belum pernah sukses) akan diprioritaskan, sedangkan yang sudah tersinkron namun berbeda akan digilir ke akhir antrean. 
-              Maksimal <strong>~500.000 data</strong> disinkronisasi setiap harinya untuk menjaga limit <em>database</em>.
-              <br>Kuota Harian Digunakan: <strong style="color: ${SISA_KUOTA <= 0 ? 'var(--danger)' : 'var(--warning)'}">${syncedToday.toLocaleString('id-ID')} / 500.000</strong>
+              Maksimal <strong>~${BATAS_AMAN.toLocaleString('id-ID')} data</strong> disinkronisasi setiap harinya untuk menjaga limit <em>database</em>.
+              <br>Kuota Harian Digunakan: <strong style="color: ${SISA_KUOTA <= 0 ? 'var(--danger)' : 'var(--warning)'}">${syncedToday.toLocaleString('id-ID')} / ${BATAS_AMAN.toLocaleString('id-ID')}</strong>
               ${SISA_KUOTA <= 0 ? '<span style="color: var(--danger); font-weight: bold; margin-left: 8px;">⚠️ KUOTA PENUH, SISA ANTREAN DITUNDA BESOK</span>' : ''}
             </div>
             <div id="queue-table-wrapper" style="overflow-x: auto;">
@@ -419,8 +420,12 @@ export default {
                  ${diffData.length === 0 ? `
                   <tr><td colspan="5" style="padding: 24px; text-align: center; color: var(--success); font-weight: 600;">✅ Semua provinsi sudah sinkron sepenuhnya!</td></tr>
                 ` : (() => {
-                  let todayQueueNum = 0;
-                  let tomorrowQueueNum = 0;
+                  let currentSimulatedDayOffset = 0;
+                  let currentSimulatedQuota = SISA_KUOTA;
+                  let currentSimulatedRunning = 0;
+                  let isFirstOfSimulatedDay = true;
+                  let queueCounters = {};
+
                   return diffData.map((d, i) => {
                     let isPartofTodaySync = false;
                     if (isMandatoryUpdateDay) {
@@ -430,18 +435,24 @@ export default {
                     }
 
                     let isToday = false;
+                    let assignedDayOffset = -1;
+
                     if (isPartofTodaySync && !d.isSyncedToday) {
-                      const isFirstUnsynced = !diffData.slice(0, i).some(prev => {
-                        let prevPartOfToday = isMandatoryUpdateDay ? todaySchedule.includes(prev.nama) : (!prev.isSyncedToday && (Math.abs(prev.selisih) > 0 && !prev.is_sinkron_walau_selisih));
-                        return prevPartOfToday && !prev.isSyncedToday;
-                      });
-                      if (runningTotalEstimasi + d.total_api <= SISA_KUOTA) {
-                        isToday = true;
-                        runningTotalEstimasi += d.total_api;
-                      } else if (isFirstUnsynced && SISA_KUOTA > 0) {
-                        isToday = true;
-                        runningTotalEstimasi += d.total_api;
+                      if (currentSimulatedRunning + d.total_api <= currentSimulatedQuota || isFirstOfSimulatedDay) {
+                        currentSimulatedRunning += d.total_api;
+                        isFirstOfSimulatedDay = false;
+                        assignedDayOffset = currentSimulatedDayOffset;
+                      } else {
+                        currentSimulatedDayOffset++;
+                        assignedDayOffset = currentSimulatedDayOffset;
+                        const nextDaySimulated = (currentDayOfWeek + currentSimulatedDayOffset - 1) % 7 + 1;
+                        const isNextDayMandatory = (nextDaySimulated === 3 || nextDaySimulated === 4);
+                        currentSimulatedQuota = isNextDayMandatory ? dynamicFullSyncLimit : 100000;
+                        currentSimulatedRunning = d.total_api;
+                        isFirstOfSimulatedDay = false;
                       }
+                      if (assignedDayOffset === 0) isToday = true;
+                      queueCounters[assignedDayOffset] = (queueCounters[assignedDayOffset] || 0) + 1;
                     }
 
                     let statusLabel = '';
@@ -451,33 +462,46 @@ export default {
                       statusLabel = '<span style="color: var(--warning); font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 4px;"><span class="spin-icon">🔄</span> Proses Sinkron</span>';
                       rowStyle = 'border-bottom: 1px solid var(--border); background: rgba(245, 158, 11, 0.15);';
                     } else if (d.isSyncedToday) {
-                      tomorrowQueueNum++;
+                      let syncedDayOffset = 1;
+                      const nextDaySimulated = (currentDayOfWeek + syncedDayOffset - 1) % 7 + 1;
                       const dayNameMap = {1: 'Senin', 2: 'Selasa', 3: 'Rabu', 4: 'Kamis', 5: "Jum'at", 6: 'Sabtu', 7: 'Minggu'};
-                      const tomorrowName = dayNameMap[tomorrowDayOfWeek];
-                      statusLabel = `<span style="color: var(--text-muted);">Smart Sync (${tomorrowName}) #${tomorrowQueueNum}</span>`;
+                      const tomorrowName = dayNameMap[nextDaySimulated];
+                      queueCounters['synced'] = (queueCounters['synced'] || 0) + 1;
+                      statusLabel = `<span style="color: var(--text-muted);">Smart Sync (${tomorrowName}) #${queueCounters['synced']}</span>`;
                     } else {
-                      const isTomorrowSync = isTomorrowMandatory && tomorrowScheduleList.includes(d.nama);
-                      const isTomorrowSyncOnMandatoryDay = isMandatoryUpdateDay && tomorrowSchedule.includes(d.nama);
-
-                      if (isTomorrowSyncOnMandatoryDay && currentDayOfWeek === 3) {
-                        tomorrowQueueNum++;
-                        const dayName = 'Kamis';
-                        statusLabel = `<span style="color: var(--text-muted);">Full Sync (${dayName}) #${tomorrowQueueNum}</span>`;
-                      } else if (isTomorrowSync && !isPartofTodaySync) {
-                        tomorrowQueueNum++;
-                        const dayName = tomorrowDayOfWeek === 3 ? 'Rabu' : 'Kamis';
-                        statusLabel = `<span style="color: var(--text-muted);">Full Sync (${dayName}) #${tomorrowQueueNum}</span>`;
-                      } else if (isMandatoryUpdateDay && todaySchedule.includes(d.nama)) {
-                        todayQueueNum++;
-                        statusLabel = `<span style="color: var(--warning); font-weight: 600;">Antrian ke #${todayQueueNum}</span>`;
-                      } else {
-                        if (isToday) {
-                          statusLabel = '<span style="color: var(--warning); font-weight: 600;">⏳ Dieksekusi Hari Ini</span>';
+                      if (assignedDayOffset >= 0) {
+                        if (assignedDayOffset === 0) {
+                          if (isMandatoryUpdateDay && todaySchedule.includes(d.nama)) {
+                            statusLabel = `<span style="color: var(--warning); font-weight: 600;">Antrian ke #${queueCounters[assignedDayOffset]}</span>`;
+                          } else {
+                            statusLabel = '<span style="color: var(--warning); font-weight: 600;">⏳ Dieksekusi Hari Ini</span>';
+                          }
                         } else {
-                          tomorrowQueueNum++;
+                          const scheduledDayOfWeek = (currentDayOfWeek + assignedDayOffset - 1) % 7 + 1;
+                          const isScheduledMandatory = (scheduledDayOfWeek === 3 || scheduledDayOfWeek === 4);
                           const dayNameMap = {1: 'Senin', 2: 'Selasa', 3: 'Rabu', 4: 'Kamis', 5: "Jum'at", 6: 'Sabtu', 7: 'Minggu'};
-                          const tomorrowName = dayNameMap[tomorrowDayOfWeek];
-                          statusLabel = `<span style="color: var(--text-muted);">Smart Sync (${tomorrowName}) #${tomorrowQueueNum}</span>`;
+                          const scheduledDayName = dayNameMap[scheduledDayOfWeek];
+                          
+                          if (isScheduledMandatory) {
+                            statusLabel = `<span style="color: var(--text-muted);">Full Sync (${scheduledDayName}) #${queueCounters[assignedDayOffset]}</span>`;
+                          } else {
+                            statusLabel = `<span style="color: var(--text-muted);">Smart Sync (${scheduledDayName}) #${queueCounters[assignedDayOffset]}</span>`;
+                          }
+                        }
+                      } else {
+                        const isTomorrowSync = isTomorrowMandatory && tomorrowScheduleList.includes(d.nama);
+                        const isTomorrowSyncOnMandatoryDay = isMandatoryUpdateDay && tomorrowSchedule.includes(d.nama);
+                        
+                        if (isTomorrowSyncOnMandatoryDay && currentDayOfWeek === 3) {
+                          queueCounters['tomorrow_manual'] = (queueCounters['tomorrow_manual'] || 0) + 1;
+                          statusLabel = `<span style="color: var(--text-muted);">Full Sync (Kamis) #${queueCounters['tomorrow_manual']}</span>`;
+                        } else if (isTomorrowSync && !isPartofTodaySync) {
+                          queueCounters['tomorrow_manual'] = (queueCounters['tomorrow_manual'] || 0) + 1;
+                          const dayName = tomorrowDayOfWeek === 3 ? 'Rabu' : 'Kamis';
+                          statusLabel = `<span style="color: var(--text-muted);">Full Sync (${dayName}) #${queueCounters['tomorrow_manual']}</span>`;
+                        } else {
+                          queueCounters['other'] = (queueCounters['other'] || 0) + 1;
+                          statusLabel = `<span style="color: var(--text-muted);">Dalam Antrean #${queueCounters['other']}</span>`;
                         }
                       }
                     }

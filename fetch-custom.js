@@ -236,7 +236,9 @@ async function fetchCustomData() {
           const syncedCodes = compareJson.data.filter(d => d.selisih === 0 && (d.raw_selisih || 0) === 0 && kodeWilayahList.includes(d.kode));
   
           // Kuota aman penulisan baris per hari untuk Cloudflare D1 Free.
-          const BATAS_AMAN_DATA_PER_HARI = 500000; 
+          const totalApiGlobal = compareJson.data ? compareJson.data.reduce((acc, curr) => acc + (curr.total_api || 0), 0) : 0;
+          const dynamicFullSyncLimit = totalApiGlobal > 0 ? Math.ceil(totalApiGlobal / 2) : 250000;
+          const BATAS_AMAN_DATA_PER_HARI = isMandatoryUpdateDay ? dynamicFullSyncLimit : 100000; 
           
           let totalDataSaatIni = compareJson.synced_today || 0;
           let finalTargets = [];
