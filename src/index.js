@@ -138,12 +138,9 @@ export default {
             let selisihColor = 'var(--danger)';
             let statusIcon = '⚠️ Berbeda';
 
-            if (d.selisih === 0) {
+            if (d.selisih === 0 || d.is_sinkron_walau_selisih) {
               selisihColor = 'var(--success)';
               statusIcon = '✅ Sinkron';
-            } else if (d.is_sinkron_walau_selisih) {
-              selisihColor = 'var(--success)';
-              statusIcon = '✅ Sinkron (Data API Tanpa NPSN)';
             } else if (d.selisih < 0) {
               selisihColor = 'var(--warning)';
               statusIcon = '⚠️ Ada Pengurangan Data';
@@ -1054,7 +1051,7 @@ export default {
     // Endpoint Perbandingan Data (API)
     if (url.pathname === '/api/compare' && request.method === 'GET') {
       try {
-        const isCron = url.searchParams.get('cron') === 'true';
+        const isCron = url.searchParams.get('cron') === 'true' || url.searchParams.get('refresh') === 'true' || url.searchParams.get('force') === 'true';
 
         // Buat tabel cache_data jika belum ada
         await env.DB.prepare(`CREATE TABLE IF NOT EXISTS cache_data (key TEXT PRIMARY KEY, value TEXT, updated_at TIMESTAMPTZ)`).run();
@@ -1158,18 +1155,29 @@ export default {
         // Hapus hardcode API_DUPLICATES, gunakan data dinamis dari duplicatesMap
 
         const comparison = apiData.map(d => {
-          // Fallback manual jika database belum sempat diisi (misal PAPUA)
           let duplicateOffset = duplicatesMap[cleanName(d.nama)] || 0;
           if (d.kode === '250000' && duplicateOffset === 0) duplicateOffset = 1;
 
-          const adjustedTotalApi = d.total_api - duplicateOffset;
           const emptyNpsnOffset = emptyNpsnMap[cleanName(d.nama)] || 0;
           const dbData = dbMap[cleanName(d.nama)] || { total_db: 0, tanpa_bentuk: 0, tanpa_jenjang: 0, tanpa_kabupaten: 0, tanpa_kecamatan: 0, tanpa_desa: 0 };
           const total_db = dbData.total_db;
-          const selisih = adjustedTotalApi - total_db;
           const raw_selisih = d.total_api - total_db;
 
-          const is_sinkron_walau_selisih = selisih !== 0 && selisih === emptyNpsnOffset;
+          const totalAllowedOffset = duplicateOffset + emptyNpsnOffset;
+          let selisih = 0;
+          let is_sinkron_walau_selisih = false;
+
+          if (raw_selisih > 0) {
+            if (raw_selisih <= totalAllowedOffset) {
+              // Jika selisih disebabkan oleh NPSN ganda atau NPSN kosong di API, dianggap sah & sinkron
+              selisih = 0;
+              is_sinkron_walau_selisih = true;
+            } else {
+              selisih = raw_selisih - totalAllowedOffset;
+            }
+          } else {
+            selisih = raw_selisih;
+          }
 
           return {
             ...d,
@@ -1269,7 +1277,8 @@ export default {
 
           const isCleanScan = customParams.isCleanScan !== false;
           if (isCleanScan && customParams.duplicates) {
-            api_duplicates = customParams.duplicates.length;
+            const rawGap = Math.max(0, (customParams.totalEstimasi || 0) - finalDbCount);
+            api_duplicates = Math.min(customParams.duplicates.length, rawGap);
           }
 
           let extraColumns = '';
