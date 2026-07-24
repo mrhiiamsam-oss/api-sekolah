@@ -454,14 +454,15 @@ async function fetchCustomData() {
 
     try {
       const { stats } = await postBatchToWorker([], 'tk', 0, true, {
-        bentukList,
+        bentukList: ['ALL'],
         namaProvinsi: provNameDB,
         waktuMulai: waktuMulai,
         activeNpsnList: fullNpsnList,
         unrecognized_shapes: unrecognized_shapes,
         totalEstimasi: currentTotalEstimasi,
         duplicates,
-        isCleanScan: provinceStartedCleanly[kodeWilayah]
+        isCleanScan: provinceStartedCleanly[kodeWilayah],
+        kodeWilayah
       });
       console.log(`🧹 Berhasil membersihkan data lama untuk ${provNameDB}. ${stats?.dihapus || 0} sekolah dihapus dan aktivitas dicatat.`);
       

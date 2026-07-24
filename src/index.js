@@ -1352,10 +1352,11 @@ export default {
                 // Batasi pengecekan maksimal 20 untuk meminimalkan subrequests Cloudflare Worker
                 const checkList = deletedNpsns.slice(0, 20);
                 const keepNpsns = new Set();
+                const verifyKode = body.kodeWilayah || '360';
                 
                 await Promise.all(checkList.map(async (npsn) => {
                   try {
-                    const res = await fetch(`https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/360?keyword=${npsn}&limit=1`);
+                    const res = await fetch(`https://api.data.belajar.id/data-portal-backend/v2/master-data/satuan-pendidikan/daftar-data-induk/${verifyKode}?keyword=${npsn}&limit=1`);
                     const json = await res.json();
                     if (json.data && json.data.length > 0) {
                       keepNpsns.add(npsn);
